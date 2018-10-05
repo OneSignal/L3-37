@@ -1,0 +1,11 @@
+[package]
+name = "postgres"
+version = "0.1.0"
+authors = ["Jonathon Sheffield <samsmug@gmail.com>"]
+
+[dependencies]
+l3-37 = { path = ".." }
+futures = "0.1.14"
+tokio = "0.1.8"
+tokio-postgres = { git = "https://github.com/sfackler/rust-postgres", rev = "86b65aae22fc1da5fcfc6c1518ab18a8c007567f" }
+postgres-shared = { git = "https://github.com/sfackler/rust-postgres", rev = "86b65aae22fc1da5fcfc6c1518ab18a8c007567f" }

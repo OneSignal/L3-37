@@ -1,13 +1,10 @@
 // #![deny(missing_docs)]
 
 extern crate crossbeam;
-#[macro_use]
-extern crate failure;
 extern crate futures;
 extern crate tokio;
 
 mod conn;
-mod error;
 mod inner;
 mod manage_connection;
 mod queue;
@@ -18,10 +15,10 @@ use futures::sync::oneshot;
 use futures::Stream;
 use std::sync::Arc;
 
+pub use manage_connection::ManageConnection;
+
 use conn::{Conn, ConnFuture};
-use error::Error;
 use inner::ConnectionPool;
-use manage_connection::ManageConnection;
 use queue::{Live, Queue};
 
 pub struct Pool<C: ManageConnection> {
@@ -48,7 +45,7 @@ impl<C: ManageConnection> Pool<C> {
         }))
     }
 
-    pub fn connection(&self) -> ConnFuture<Conn<C>, Error> {
+    pub fn connection(&self) -> ConnFuture<Conn<C>, C::Error> {
         if let Some(conn) = self.conn_pool.get_connection() {
             future::Either::A(future::ok(Conn {
                 conn: Some(conn),
@@ -65,7 +62,7 @@ impl<C: ManageConnection> Pool<C> {
                 rx.map(|conn| Conn {
                     conn: Some(conn),
                     pool: Some(pool),
-                }).map_err(|err| Error::PoolCanceled(err)),
+                }).map_err(|_err| unimplemented!()),
             ))
         }
     }
@@ -87,23 +84,23 @@ mod tests {
 
     impl ManageConnection for DummyManager {
         type Connection = ();
-        type Error = Error;
+        type Error = ();
 
         fn connect(&self) -> Box<Future<Item = Self::Connection, Error = Self::Error> + 'static> {
             Box::new(future::ok(()))
         }
 
-        fn is_valid(
-            &self,
-            _conn: Self::Connection,
-        ) -> Box<Future<Item = Self::Connection, Error = (Self::Error, Self::Connection)>> {
-            unimplemented!()
-        }
-        /// Synchronously determine if the connection is no longer usable, if possible.
-        fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
-            unimplemented!()
-        }
-        /// Produce an error representing a connection timeout.
+        // fn is_valid(
+        //     &self,
+        //     _conn: Self::Connection,
+        // ) -> Box<Future<Item = Self::Connection, Error = (Self::Error, Self::Connection)>> {
+        //     unimplemented!()
+        // }
+        // /// Synchronously determine if the connection is no longer usable, if possible.
+        // fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
+        //     unimplemented!()
+        // }
+        // /// Produce an error representing a connection timeout.
         fn timed_out(&self) -> Self::Error {
             unimplemented!()
         }

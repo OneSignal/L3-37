@@ -7,4 +7,3 @@ authors = ["Jonathon Sheffield <samsmug@gmail.com>"]
 futures = "0.1.14"
 tokio = "0.1.8"
 crossbeam = "0.4"
-failure = "0.1.2"

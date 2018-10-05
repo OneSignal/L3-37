@@ -33,12 +33,12 @@ pub trait ManageConnection: Send + Sync + 'static {
     /// Attempts to create a new connection.
     fn connect(&self) -> Box<Future<Item = Self::Connection, Error = Self::Error> + 'static>;
     /// Determines if the connection is still connected to the database.
-    fn is_valid(
-        &self,
-        conn: Self::Connection,
-    ) -> Box<Future<Item = Self::Connection, Error = (Self::Error, Self::Connection)>>;
-    /// Synchronously determine if the connection is no longer usable, if possible.
-    fn has_broken(&self, conn: &mut Self::Connection) -> bool;
+    // fn is_valid(
+    //     &self,
+    //     conn: Self::Connection,
+    // ) -> Box<Future<Item = Self::Connection, Error = (Self::Error, Self::Connection)>>;
+    // /// Synchronously determine if the connection is no longer usable, if possible.
+    // fn has_broken(&self, conn: &mut Self::Connection) -> bool;
     /// Produce an error representing a connection timeout.
     fn timed_out(&self) -> Self::Error;
 }

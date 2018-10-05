@@ -10,7 +10,7 @@ pub extern crate tokio_postgres;
 use futures::Future;
 use tokio_postgres::error::Error;
 use tokio_postgres::params::{ConnectParams, IntoConnectParams};
-use tokio_postgres::{Client, Connection, TlsMode};
+use tokio_postgres::{Client, TlsMode};
 
 use std::fmt;
 
@@ -57,17 +57,10 @@ impl l3_37::ManageConnection for PostgresConnectionManager {
         )
     }
 
-    // fn is_valid(
-    //     &self,
-    //     conn: Self::Connection,
-    // ) -> Box<Future<Item = Self::Connection, Error = (Self::Error, Self::Connection)>> {
-    //     Box::new(
-    //         conn.client
-    //             .batch_execute("")
-    //             .map(|batch| conn)
-    //             .map_err(move |err| (err, conn)),
-    //     )
-    // }
+    fn is_valid(&self, mut conn: Self::Connection) -> Box<Future<Item = (), Error = Self::Error>> {
+        // If we can execute this without erroring, we're definitely still connected to the datbase
+        Box::new(conn.client.batch_execute(""))
+    }
 
     // fn has_broken(&self, conn: &mut Self::Connection) -> bool {
     //     false

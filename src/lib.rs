@@ -90,17 +90,10 @@ mod tests {
             Box::new(future::ok(()))
         }
 
-        // fn is_valid(
-        //     &self,
-        //     _conn: Self::Connection,
-        // ) -> Box<Future<Item = Self::Connection, Error = (Self::Error, Self::Connection)>> {
-        //     unimplemented!()
-        // }
-        // /// Synchronously determine if the connection is no longer usable, if possible.
-        // fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
-        //     unimplemented!()
-        // }
-        // /// Produce an error representing a connection timeout.
+        fn is_valid(&self, _conn: Self::Connection) -> Box<Future<Item = (), Error = Self::Error>> {
+            unimplemented!()
+        }
+        /// Produce an error representing a connection timeout.
         fn timed_out(&self) -> Self::Error {
             unimplemented!()
         }

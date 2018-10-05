@@ -1,8 +1,10 @@
 use crossbeam::queue::SegQueue;
 use futures::sync::oneshot;
+use futures::Future;
 
 use manage_connection::ManageConnection;
 use queue::{Live, Queue};
+use Config;
 
 // Most of this comes from c3po's inner module: https://github.com/withoutboats/c3po/blob/08a6fde00c6506bacfe6eebe621520ee54b418bb/src/inner.rs
 // with some additions and updates to work with modern versions of tokio
@@ -18,15 +20,18 @@ pub struct ConnectionPool<C: ManageConnection> {
     waiting: SegQueue<oneshot::Sender<Live<C::Connection>>>,
     /// Connection manager used to create new connections as needed
     manager: C,
+    /// Configuration for the pool
+    config: Config,
 }
 
 impl<C: ManageConnection> ConnectionPool<C> {
     /// Creates a new connection pool
-    pub fn new(conns: Queue<C::Connection>, manager: C) -> ConnectionPool<C> {
+    pub fn new(conns: Queue<C::Connection>, manager: C, config: Config) -> ConnectionPool<C> {
         ConnectionPool {
             conns: conns,
             waiting: SegQueue::new(),
             manager,
+            config,
         }
     }
 
@@ -50,6 +55,19 @@ impl<C: ManageConnection> ConnectionPool<C> {
     /// The number of idle connections in the pool.
     pub fn idle_conns(&self) -> usize {
         self.conns.idle()
+    }
+
+    pub fn try_spawn_connection(
+        &self,
+    ) -> Option<Box<Future<Item = Live<C::Connection>, Error = C::Error>>> {
+        if self.config.max_size == self.total_conns() {
+            None
+        } else {
+            Some(Box::new(self.manager.connect().map(|conn| {
+                self.conns.increment();
+                Live::new(conn)
+            })))
+        }
     }
 
     /// Receive a connection back to be stored in the pool. This could have one

@@ -30,15 +30,41 @@ pub struct Pool<C: ManageConnection> {
     conn_pool: Arc<ConnectionPool<C>>,
 }
 
+/// Configuration for the connection pool
+#[derive(Debug)]
+pub struct Config {
+    /// Minimum number of connections in the pool. The pool will be initialied with this number of
+    /// connections
+    min_size: usize,
+    /// Max number of connections to keep in the pool
+    max_size: usize,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            max_size: 10,
+            min_size: 1,
+        }
+    }
+}
+
 impl<C: ManageConnection> Pool<C> {
     /// Creates a new connection pool
     ///
     /// The returned future will resolve to the pool if successful, which can then be used
     /// immediately.
-    pub fn new(manager: C) -> Box<Future<Item = Pool<C>, Error = C::Error>> {
-        // TODO: remove hard coding from take
-        let conns =
-            stream::futures_unordered(::std::iter::repeat(&manager).take(2).map(|c| c.connect()));
+    pub fn new(manager: C, config: Config) -> Box<Future<Item = Pool<C>, Error = C::Error>> {
+        assert!(
+            config.max_size >= config.min_size,
+            "max_size of pool must be greater than or equal to the min_size"
+        );
+
+        let conns = stream::futures_unordered(
+            ::std::iter::repeat(&manager)
+                .take(config.min_size)
+                .map(|c| c.connect()),
+        );
 
         // Fold the connections we are creating into a Queue object
         let conns = conns.fold::<_, _, Result<_, _>>(Queue::new(), |conns, conn| {
@@ -48,7 +74,7 @@ impl<C: ManageConnection> Pool<C> {
 
         // Set up the pool once the connections are established
         Box::new(conns.and_then(move |conns| {
-            let conn_pool = Arc::new(ConnectionPool::new(conns, manager));
+            let conn_pool = Arc::new(ConnectionPool::new(conns, manager, config));
 
             Ok(Pool { conn_pool })
         }))
@@ -68,12 +94,19 @@ impl<C: ManageConnection> Pool<C> {
                 pool: Some(Arc::clone(&self.conn_pool)),
             }))
         } else {
-            //Have the pool notify us of the connection
+            if let Some(conn_future) = self.conn_pool.try_spawn_connection() {
+                let pool_clone = Arc::clone(&self.conn_pool);
+                return future::Either::B(Box::new(conn_future.map(|conn| Conn {
+                    conn: Some(conn),
+                    pool: Some(pool_clone),
+                })));
+            }
+            // Have the pool notify us of the connection
             let (tx, rx) = oneshot::channel();
             self.conn_pool.notify_of_connection(tx);
 
             // Prepare the future which will wait for a free connection
-            let pool = self.conn_pool.clone();
+            let pool = Arc::clone(&self.conn_pool);
             future::Either::B(Box::new(
                 rx.map(|conn| Conn {
                     conn: Some(conn),
@@ -120,8 +153,9 @@ mod tests {
     #[test]
     fn simple_pool_creation_and_connection() {
         let mngr = DummyManager {};
+        let config: Config = Default::default();
 
-        let future = Pool::new(mngr).and_then(|pool| {
+        let future = Pool::new(mngr, config).and_then(|pool| {
             pool.connection().and_then(|conn| {
                 if let Some(Live {
                     conn: (),
@@ -144,11 +178,11 @@ mod tests {
     #[test]
     fn it_returns_a_non_resolved_future_when_over_pool_limit() {
         let mngr = DummyManager {};
+        let config: Config = Default::default();
 
-        // pool is of size 2, we try to get 3 connections so the third one will never resolve
-        let future = Pool::new(mngr).and_then(|pool| {
+        // pool is of size , we try to get 2 connections so the second one will never resolve
+        let future = Pool::new(mngr, config).and_then(|pool| {
             // Forget the values so we don't drop them, and return them back to the pool
-            ::std::mem::forget(pool.connection());
             ::std::mem::forget(pool.connection());
             pool.connection()
                 .timeout(Duration::from_millis(10))

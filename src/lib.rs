@@ -98,7 +98,7 @@ impl<C: ManageConnection> Pool<C> {
                 let pool_clone = Arc::clone(&self.conn_pool);
                 return future::Either::B(Box::new(conn_future.map(|conn| Conn {
                     conn: Some(conn),
-                    pool: Some(pool_clone),
+                    pool: pool_clone,
                 })));
             }
             // Have the pool notify us of the connection
@@ -179,8 +179,8 @@ mod tests {
     fn it_returns_a_non_resolved_future_when_over_pool_limit() {
         let mngr = DummyManager {};
         let config: Config = Config {
-            max_size: 2,
-            min_size: 2,
+            max_size: 1,
+            min_size: 1,
         };
 
         // pool is of size , we try to get 2 connections so the second one will never resolve

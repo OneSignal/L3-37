@@ -69,6 +69,10 @@ impl<C: ManageConnection> Pool<C> {
             ))
         }
     }
+
+    pub fn idle_conns(&self) -> usize {
+        self.conn_pool.idle_conns()
+    }
 }
 
 #[cfg(test)]
@@ -79,7 +83,7 @@ mod tests {
     use tokio::runtime::current_thread::Runtime;
 
     #[derive(Debug)]
-    struct DummyManager {}
+    pub struct DummyManager {}
 
     impl ManageConnection for DummyManager {
         type Connection = ();
@@ -130,13 +134,14 @@ mod tests {
     }
 
     #[test]
-    fn it_waits_on_a_connection_when_over_pool_limit() {
+    fn it_returns_a_non_resolved_future_when_over_pool_limit() {
         let mngr = DummyManager {};
 
         // pool is of size 2, we try to get 3 connections so the third one will never resolve
         let future = Pool::new(mngr).and_then(|pool| {
-            pool.connection();
-            pool.connection();
+            // Forget the values so we don't drop them, and return them back to the pool
+            ::std::mem::forget(pool.connection());
+            ::std::mem::forget(pool.connection());
             pool.connection()
                 .timeout(Duration::from_millis(10))
                 .then(|r| match r {

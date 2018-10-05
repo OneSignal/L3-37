@@ -9,7 +9,7 @@ use queue::{Live, Queue};
 
 #[derive(Debug)]
 pub struct ConnectionPool<C: ManageConnection> {
-    avail_conns: Queue<C::Connection>,
+    conns: Queue<C::Connection>,
     waiting: SegQueue<oneshot::Sender<Live<C::Connection>>>,
     manager: C,
 }
@@ -17,19 +17,30 @@ pub struct ConnectionPool<C: ManageConnection> {
 impl<C: ManageConnection> ConnectionPool<C> {
     pub fn new(conns: Queue<C::Connection>, manager: C) -> ConnectionPool<C> {
         ConnectionPool {
-            avail_conns: conns,
+            conns: conns,
             waiting: SegQueue::new(),
             manager,
         }
     }
 
     pub fn get_connection(&self) -> Option<Live<C::Connection>> {
-        self.avail_conns.get()
+        self.conns.get()
     }
 
     pub fn notify_of_connection(&self, tx: oneshot::Sender<Live<C::Connection>>) {
         self.waiting.push(tx);
     }
+
+    /// The total number of connections in the pool.
+    pub fn total_conns(&self) -> usize {
+        self.conns.total()
+    }
+
+    /// The number of idle connections in the pool.
+    pub fn idle_conns(&self) -> usize {
+        self.conns.idle()
+    }
+
     // /// Prepare the reap job to run on the event loop.
     // pub fn prepare_reaper(this: &Arc<Self>) {
     //     let pool = this.clone();
@@ -83,44 +94,24 @@ impl<C: ManageConnection> ConnectionPool<C> {
     //     })
     // }
 
-    // /// Receive a connection back to be stored in the pool. This could have one
-    // /// of three outcomes:
-    // /// * The connection will be released, if it should be released.
-    // /// * The connection will be passed to a waiting future, if any exist.
-    // /// * The connection will be put back into the connection pool.
-    // pub fn store(this: &Arc<Self>, conn: Live<C::Instance>) {
-    //     // If this connection has been alive too long, release it
-    //     if this
-    //         .config
-    //         .max_live_time
-    //         .map_or(false, |max| conn.live_since.elapsed() >= max)
-    //     {
-    //         // Create a new connection if we've fallen below the minimum count
-    //         if this.conns.total() - 1 < this.config.min_connections {
-    //             this.replenish_connection(this.clone());
-    //         } else {
-    //             this.conns.decrement();
-    //         }
-    //     } else {
-    //         // Otherwise, first attempt to send it to any waiting requests
-    //         let mut conn = conn;
-    //         while let Some(waiting) = this.waiting.try_pop() {
-    //             conn = match waiting.send(conn) {
-    //                 Ok(_) => return,
-    //                 Err(conn) => conn,
-    //             };
-    //         }
-    //         // If there are no waiting requests & we aren't over the max idle
-    //         // connections limit, attempt to store it back in the pool
-    //         if this
-    //             .config
-    //             .max_idle_connections
-    //             .map_or(true, |max| max >= this.conns.idle())
-    //         {
-    //             this.conns.store(conn);
-    //         }
-    //     }
-    // }
+    /// Receive a connection back to be stored in the pool. This could have one
+    /// of three outcomes:
+    /// * The connection will be released, if it should be released.
+    /// * The connection will be passed to a waiting future, if any exist.
+    /// * The connection will be put back into the connection pool.
+    pub fn store(&self, conn: Live<C::Connection>) {
+        // Otherwise, first attempt to send it to any waiting requests
+        let mut conn = conn;
+        while let Some(waiting) = self.waiting.try_pop() {
+            conn = match waiting.send(conn) {
+                Ok(_) => return,
+                Err(conn) => conn,
+            };
+        }
+        // If there are no waiting requests & we aren't over the max idle
+        // connections limit, attempt to store it back in the pool
+        self.conns.store(conn);
+    }
 
     // /// Increment the connection count.
     // pub fn increment(&self) {
@@ -200,19 +191,9 @@ impl<C: ManageConnection> ConnectionPool<C> {
     //     }
     // }
 
-    // /// The total number of connections in the pool.
-    // pub fn total(&self) -> usize {
-    //     self.conns.total()
-    // }
-
     // /// The maximum connections allowed in the pool.
     // pub fn max_conns(&self) -> Option<usize> {
     //     self.config.max_connections
-    // }
-
-    // /// The number of idle connections in the pool.
-    // fn idle(&self) -> usize {
-    //     self.conns.idle()
     // }
 
     // /// The minimum connections allowed in the pool.

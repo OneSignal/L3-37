@@ -5,6 +5,8 @@ use std::time::Instant;
 
 use crossbeam::queue::SegQueue;
 
+// Almost all of this file is directly from c3po: https://github.com/withoutboats/c3po/blob/08a6fde00c6506bacfe6eebe621520ee54b418bb/src/queue.rs
+
 /// A connection, carrying with it a record of how long it has been live.
 #[derive(Debug)]
 pub struct Live<T> {
@@ -109,9 +111,6 @@ impl<C> Queue<C> {
 
 #[cfg(test)]
 mod tests {
-    use std::thread;
-    use std::time::Duration;
-
     use super::*;
 
     #[test]

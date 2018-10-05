@@ -1,6 +1,7 @@
 use crossbeam::queue::SegQueue;
 use futures::sync::oneshot;
 use futures::Future;
+use std::sync::Arc;
 
 use manage_connection::ManageConnection;
 use queue::{Live, Queue};
@@ -14,7 +15,7 @@ use Config;
 #[derive(Debug)]
 pub struct ConnectionPool<C: ManageConnection> {
     /// Queue of connections in the pool
-    conns: Queue<C::Connection>,
+    conns: Arc<Queue<C::Connection>>,
     /// Queue of oneshot's that are waiting to be given a new connection when the current pool is
     /// already saturated.
     waiting: SegQueue<oneshot::Sender<Live<C::Connection>>>,
@@ -28,7 +29,7 @@ impl<C: ManageConnection> ConnectionPool<C> {
     /// Creates a new connection pool
     pub fn new(conns: Queue<C::Connection>, manager: C, config: Config) -> ConnectionPool<C> {
         ConnectionPool {
-            conns: conns,
+            conns: Arc::new(conns),
             waiting: SegQueue::new(),
             manager,
             config,
@@ -57,14 +58,15 @@ impl<C: ManageConnection> ConnectionPool<C> {
         self.conns.idle()
     }
 
-    pub fn try_spawn_connection(
+    pub(crate) fn try_spawn_connection(
         &self,
     ) -> Option<Box<Future<Item = Live<C::Connection>, Error = C::Error>>> {
         if self.config.max_size == self.total_conns() {
             None
         } else {
-            Some(Box::new(self.manager.connect().map(|conn| {
-                self.conns.increment();
+            let conns = Arc::clone(&self.conns);
+            Some(Box::new(self.manager.connect().map(move |conn| {
+                conns.increment();
                 Live::new(conn)
             })))
         }

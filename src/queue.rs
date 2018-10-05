@@ -107,6 +107,30 @@ impl<C> Queue<C> {
         // this is actually run
         // self.idle_count.fetch_sub(1, Ordering::SeqCst);
     }
+
+    pub fn safe_increment(&self, max: usize) -> Option<()> {
+        let mut curr_count = self.total();
+        while curr_count < max {
+            match self.total_count.compare_exchange(
+                curr_count,
+                curr_count + 1,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => {
+                    // If we won the race, return that we did and stop trying
+                    return Some(());
+                }
+                Err(_) => {
+                    // If didn't win the race, get the current count again and try to do the whole
+                    // thing again
+                    curr_count = self.total();
+                }
+            }
+        }
+
+        None
+    }
 }
 
 #[cfg(test)]

@@ -61,14 +61,21 @@ impl<C: ManageConnection> ConnectionPool<C> {
     pub(crate) fn try_spawn_connection(
         &self,
     ) -> Option<Box<Future<Item = Live<C::Connection>, Error = C::Error>>> {
-        if self.config.max_size == self.total_conns() {
-            None
-        } else {
+        if let Some(_) = self.conns.safe_increment(self.config.max_size) {
             let conns = Arc::clone(&self.conns);
-            Some(Box::new(self.manager.connect().map(move |conn| {
-                conns.increment();
-                Live::new(conn)
-            })))
+            Some(Box::new(self.manager.connect().then(
+                move |result| match result {
+                    Ok(conn) => Ok(Live::new(conn)),
+                    Err(err) => {
+                        // if we weren't able to make a new connection, we need to decrement
+                        // connections, since we preincremented the connection count for this  one
+                        conns.decrement();
+                        Err(err)
+                    }
+                },
+            )))
+        } else {
+            None
         }
     }
 

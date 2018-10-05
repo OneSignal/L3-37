@@ -178,7 +178,10 @@ mod tests {
     #[test]
     fn it_returns_a_non_resolved_future_when_over_pool_limit() {
         let mngr = DummyManager {};
-        let config: Config = Default::default();
+        let config: Config = Config {
+            max_size: 2,
+            min_size: 2,
+        };
 
         // pool is of size , we try to get 2 connections so the second one will never resolve
         let future = Pool::new(mngr, config).and_then(|pool| {
@@ -196,6 +199,60 @@ mod tests {
                         }
                     }
                 })
+        });
+
+        Runtime::new()
+            .expect("could not run")
+            .block_on(future)
+            .expect("could not run");
+    }
+
+    #[test]
+    fn it_allocates_new_connections_up_to_max_size() {
+        let mngr = DummyManager {};
+        let config: Config = Config {
+            max_size: 2,
+            min_size: 1,
+        };
+
+        // pool is of size 1, but is allowed to generate new connections up to 2.
+        // When we try 2 connections, they should both pass without timing out
+        let future = Pool::new(mngr, config).and_then(|pool| {
+            // Forget the values so we don't drop them, and return them back to the pool
+            ::std::mem::forget(pool.connection());
+            let f1 = pool
+                .connection()
+                .timeout(Duration::from_millis(10))
+                .then(|r| match r {
+                    Ok(conn) => {
+                        ::std::mem::forget(conn);
+                        Ok::<(), ()>(())
+                    }
+                    Err(err) => {
+                        if err.is_elapsed() {
+                            panic!("second connection timed out")
+                        } else {
+                            Ok(())
+                        }
+                    }
+                });
+
+            // The third connection should timeout though, as we're only allowed to go up to 2
+            let f2 = pool
+                .connection()
+                .timeout(Duration::from_millis(10))
+                .then(|r| match r {
+                    Ok(_) => panic!("third didn't timeout"),
+                    Err(err) => {
+                        if err.is_elapsed() {
+                            Ok(())
+                        } else {
+                            panic!("third didn't timeout")
+                        }
+                    }
+                });
+
+            f1.join(f2)
         });
 
         Runtime::new()

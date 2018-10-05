@@ -1,4 +1,8 @@
-// #![deny(missing_docs)]
+#![deny(missing_docs)]
+
+//! Connection pooling library for tokio.
+//!
+//! Any connection type that implements the `ManageConnection` trait can be used with this libary.
 
 extern crate crossbeam;
 extern crate futures;
@@ -21,11 +25,16 @@ use conn::{Conn, ConnFuture};
 use inner::ConnectionPool;
 use queue::{Live, Queue};
 
+/// General connection pool
 pub struct Pool<C: ManageConnection> {
     conn_pool: Arc<ConnectionPool<C>>,
 }
 
 impl<C: ManageConnection> Pool<C> {
+    /// Creates a new connection pool
+    ///
+    /// The returned future will resolve to the pool if successful, which can then be used
+    /// immediately.
     pub fn new(manager: C) -> Box<Future<Item = Pool<C>, Error = C::Error>> {
         // TODO: remove hard coding from take
         let conns =
@@ -45,6 +54,13 @@ impl<C: ManageConnection> Pool<C> {
         }))
     }
 
+    /// Returns a future that resolves to a connection from the pool.
+    ///
+    /// If there are connections that are available to be used, the future will resolve immediately,
+    /// otherwise, the connection will be in a pending state until a future is returned to the pool.
+    ///
+    /// This **does not** implement any timeout functionality. Timeout functionality can be added
+    /// by calling `.timeout` on the returned future.
     pub fn connection(&self) -> ConnFuture<Conn<C>, C::Error> {
         if let Some(conn) = self.conn_pool.get_connection() {
             future::Either::A(future::ok(Conn {
@@ -67,6 +83,8 @@ impl<C: ManageConnection> Pool<C> {
         }
     }
 
+    /// Returns the number of idle (ready to be used) connections in the pool. Not incredibly useful
+    /// for general runtime usuage, but can be very useful for debugging or tests.
     pub fn idle_conns(&self) -> usize {
         self.conn_pool.idle_conns()
     }

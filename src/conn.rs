@@ -53,13 +53,18 @@ mod tests {
     use super::*;
     use tests::DummyManager;
     use tokio::runtime::current_thread::Runtime;
+    use Config;
     use Pool;
 
     #[test]
     fn conn_pushes_back_into_pool_after_drop() {
         let mngr = DummyManager {};
+        let config = Config {
+            min_size: 2,
+            max_size: 2,
+        };
 
-        let future = Pool::new(mngr).and_then(|pool| {
+        let future = Pool::new(mngr, config).and_then(|pool| {
             assert_eq!(pool.idle_conns(), 2);
 
             pool.connection().and_then(move |conn| {

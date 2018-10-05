@@ -36,7 +36,6 @@ impl<C: ManageConnection> Pool<C> {
     /// The returned future will resolve to the pool if successful, which can then be used
     /// immediately.
     pub fn new(manager: C) -> Box<Future<Item = Pool<C>, Error = C::Error>> {
-        // TODO: remove hard coding from take
         let conns =
             stream::futures_unordered(::std::iter::repeat(&manager).take(2).map(|c| c.connect()));
 

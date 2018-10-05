@@ -9,7 +9,7 @@ pub extern crate tokio_postgres;
 
 use futures::Future;
 use tokio_postgres::error::Error;
-use tokio_postgres::params::{ConnectParams, IntoConnectParams};
+use tokio_postgres::params::ConnectParams;
 use tokio_postgres::{Client, TlsMode};
 
 use std::fmt;
@@ -28,14 +28,13 @@ pub struct PostgresConnectionManager {
 
 impl PostgresConnectionManager {
     /// Create a new `PostgresConnectionManager`.
-    pub fn new<F, T>(params: T, tls_mode: F) -> Result<PostgresConnectionManager>
+    pub fn new<F>(params: ConnectParams, tls_mode: F) -> Result<PostgresConnectionManager>
     where
-        T: IntoConnectParams,
         F: Fn() -> TlsMode + Send + Sync + 'static,
     {
         Ok(PostgresConnectionManager {
             // TODO: remove this unwrap, there used to be a type this matched in tokio pg
-            params: params.into_connect_params().unwrap(),
+            params: params,
             tls_mode: Box::new(tls_mode),
         })
     }
@@ -90,11 +89,14 @@ mod tests {
     use std::thread::sleep;
     use std::time::Duration;
     use tokio::runtime::current_thread::Runtime;
+    use tokio_postgres::params::IntoConnectParams;
 
     #[test]
     fn it_works() {
         let mngr = PostgresConnectionManager::new(
-            "postgres://pass_user:password@localhost:5433/postgres",
+            "postgres://pass_user:password@localhost:5433/postgres"
+                .into_connect_params()
+                .unwrap(),
             || tokio_postgres::TlsMode::None,
         ).unwrap();
 
@@ -118,7 +120,9 @@ mod tests {
     #[test]
     fn it_allows_multiple_queries_at_the_same_time() {
         let mngr = PostgresConnectionManager::new(
-            "postgres://pass_user:password@localhost:5433/postgres",
+            "postgres://pass_user:password@localhost:5433/postgres"
+                .into_connect_params()
+                .unwrap(),
             || tokio_postgres::TlsMode::None,
         ).unwrap();
 
@@ -161,7 +165,9 @@ mod tests {
     #[test]
     fn it_reuses_connections() {
         let mngr = PostgresConnectionManager::new(
-            "postgres://pass_user:password@localhost:5433/postgres",
+            "postgres://pass_user:password@localhost:5433/postgres"
+                .into_connect_params()
+                .unwrap(),
             || tokio_postgres::TlsMode::None,
         ).unwrap();
 

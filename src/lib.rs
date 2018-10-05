@@ -65,7 +65,7 @@ impl<C: ManageConnection> Pool<C> {
         if let Some(conn) = self.conn_pool.get_connection() {
             future::Either::A(future::ok(Conn {
                 conn: Some(conn),
-                pool: Some(Arc::clone(&self.conn_pool)),
+                pool: Arc::clone(&self.conn_pool),
             }))
         } else {
             //Have the pool notify us of the connection
@@ -77,7 +77,7 @@ impl<C: ManageConnection> Pool<C> {
             future::Either::B(Box::new(
                 rx.map(|conn| Conn {
                     conn: Some(conn),
-                    pool: Some(pool),
+                    pool: pool,
                 }).map_err(|_err| unimplemented!()),
             ))
         }

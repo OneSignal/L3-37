@@ -108,6 +108,9 @@ impl<C> Queue<C> {
         // self.idle_count.fetch_sub(1, Ordering::SeqCst);
     }
 
+    /// Increment the total number of connections safely, with guarantees that we won't increment
+    /// past `max`. This does block until max is reached, so don't pass a huge max size and expect
+    /// it to return quickly.
     pub fn safe_increment(&self, max: usize) -> Option<()> {
         let mut curr_count = self.total();
         while curr_count < max {

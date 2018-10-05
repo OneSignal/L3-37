@@ -58,6 +58,9 @@ impl<C: ManageConnection> ConnectionPool<C> {
         self.conns.idle()
     }
 
+    /// Attempt to spawn a new connection. If we're not already over the max number of connections,
+    /// a future will be returned that resolves to the new connection.
+    /// Otherwise, None will be returned
     pub(crate) fn try_spawn_connection(
         &self,
     ) -> Option<Box<Future<Item = Live<C::Connection>, Error = C::Error>>> {

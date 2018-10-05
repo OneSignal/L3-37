@@ -27,13 +27,22 @@ use futures::Future;
 pub trait ManageConnection: Send + Sync + 'static {
     /// The connection type this manager deals with.
     type Connection: Send + 'static;
+
     /// The error type returned by `Connection`s.
     type Error: Send + 'static;
 
     /// Attempts to create a new connection.
+    ///
+    /// Note that boxing is used here since impl Trait is not yet supported
+    /// within trait definitions.
     fn connect(&self) -> Box<Future<Item = Self::Connection, Error = Self::Error> + 'static>;
+
     /// Determines if the connection is still connected to the database.
+    ///
+    /// Note that boxing is used here since impl Trait is not yet supported
+    /// within trait definitions.
     fn is_valid(&self, conn: Self::Connection) -> Box<Future<Item = (), Error = Self::Error>>;
+
     /// Produce an error representing a connection timeout.
     fn timed_out(&self) -> Self::Error;
 }

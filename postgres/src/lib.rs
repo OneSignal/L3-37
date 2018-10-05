@@ -85,7 +85,7 @@ impl fmt::Debug for PostgresConnectionManager {
 mod tests {
     use super::*;
     use futures::Stream;
-    use l3_37::Pool;
+    use l3_37::{Config, Pool};
     use std::thread::sleep;
     use std::time::Duration;
     use tokio::runtime::current_thread::Runtime;
@@ -101,7 +101,8 @@ mod tests {
         ).unwrap();
 
         let mut runtime = Runtime::new().expect("could not run");
-        let future = Pool::new(mngr).and_then(|pool| {
+        let config: Config = Default::default();
+        let future = Pool::new(mngr, config).and_then(|pool| {
             pool.connection().and_then(|mut conn| {
                 conn.client
                     .prepare("SELECT 1::INT4")
@@ -127,7 +128,8 @@ mod tests {
         ).unwrap();
 
         let mut runtime = Runtime::new().expect("could not run");
-        let future = Pool::new(mngr).and_then(|pool| {
+        let config: Config = Default::default();
+        let future = Pool::new(mngr, config).and_then(|pool| {
             let q1 = pool.connection().and_then(|mut conn| {
                 conn.client
                     .prepare("SELECT 1::INT4")
@@ -172,7 +174,8 @@ mod tests {
         ).unwrap();
 
         let mut runtime = Runtime::new().expect("could not run");
-        let future = Pool::new(mngr).and_then(|pool| {
+        let config: Config = Default::default();
+        let future = Pool::new(mngr, config).and_then(|pool| {
             let q1 = pool.connection().and_then(|mut conn| {
                 conn.client
                     .prepare("SELECT 1::INT4")

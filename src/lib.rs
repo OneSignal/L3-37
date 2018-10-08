@@ -38,9 +38,9 @@ pub struct Pool<C: ManageConnection> {
 pub struct Config {
     /// Minimum number of connections in the pool. The pool will be initialied with this number of
     /// connections
-    min_size: usize,
+    pub min_size: usize,
     /// Max number of connections to keep in the pool
-    max_size: usize,
+    pub max_size: usize,
 }
 
 /// Error type returned by this module

@@ -22,9 +22,9 @@ use futures::sync::oneshot;
 use futures::Stream;
 use std::sync::Arc;
 
+pub use conn::{Conn, ConnFuture};
 pub use manage_connection::ManageConnection;
 
-use conn::{Conn, ConnFuture};
 use inner::ConnectionPool;
 use queue::{Live, Queue};
 

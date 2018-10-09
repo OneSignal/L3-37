@@ -18,7 +18,7 @@ use std::fmt;
 type Result<T> = std::result::Result<T, Error>;
 
 pub struct AsyncConnection {
-    client: Client,
+    pub client: Client,
 }
 
 /// A `bb8::ManageConnection` for `tokio_postgres::Connection`s.

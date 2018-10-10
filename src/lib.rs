@@ -20,7 +20,7 @@ use futures::future::{self, Future};
 use futures::stream;
 use futures::sync::oneshot;
 use futures::Stream;
-use std::sync::Arc;
+use std::sync::{Arc, MutexGuard};
 
 pub use conn::{Conn, ConnFuture};
 pub use manage_connection::ManageConnection;
@@ -57,6 +57,18 @@ impl Default for Config {
         Config {
             max_size: 10,
             min_size: 1,
+        }
+    }
+}
+
+/// Returns a new `Pool` referencing the same state as `self`.
+impl<C> Clone for Pool<C>
+where
+    C: ManageConnection,
+{
+    fn clone(&self) -> Pool<C> {
+        Pool {
+            conn_pool: self.conn_pool.clone(),
         }
     }
 }
@@ -100,17 +112,23 @@ impl<C: ManageConnection> Pool<C> {
     /// This **does not** implement any timeout functionality. Timeout functionality can be added
     /// by calling `.timeout` on the returned future.
     pub fn connection(&self) -> ConnFuture<Conn<C>, Error<C::Error>> {
-        if let Some(conn) = self.conn_pool.get_connection() {
+        let conns = self
+            .conn_pool
+            .conns
+            .lock()
+            .expect("posioned connection mutex");
+
+        if let Some(conn) = conns.get() {
             future::Either::A(future::ok(Conn {
                 conn: Some(conn),
-                pool: Arc::clone(&self.conn_pool),
+                pool: self.clone(),
             }))
         } else {
-            if let Some(conn_future) = self.conn_pool.try_spawn_connection() {
-                let pool_clone = Arc::clone(&self.conn_pool);
+            if let Some(conn_future) = Self::try_spawn_connection(&self, conns) {
+                let this = self.clone();
                 return future::Either::B(Box::new(conn_future.map(|conn| Conn {
                     conn: Some(conn),
-                    pool: pool_clone,
+                    pool: this,
                 })));
             }
             // Have the pool notify us of the connection
@@ -118,20 +136,82 @@ impl<C: ManageConnection> Pool<C> {
             self.conn_pool.notify_of_connection(tx);
 
             // Prepare the future which will wait for a free connection
-            let pool = Arc::clone(&self.conn_pool);
+            let this = self.clone();
             future::Either::B(Box::new(
                 rx.map(|conn| Conn {
                     conn: Some(conn),
-                    pool: pool,
+                    pool: this,
                 }).map_err(|_err| unimplemented!()),
             ))
         }
     }
+    /// Attempt to spawn a new connection. If we're not already over the max number of connections,
+    /// a future will be returned that resolves to the new connection.
+    /// Otherwise, None will be returned
+    pub(crate) fn try_spawn_connection(
+        this: &Self,
+        conns: MutexGuard<'_, Arc<queue::Queue<<C as ManageConnection>::Connection>>>,
+    ) -> Option<Box<Future<Item = Live<C::Connection>, Error = Error<C::Error>>>> {
+        if let Some(_) = conns.safe_increment(this.conn_pool.max_size()) {
+            let conns = Arc::clone(&conns);
+            Some(Box::new(this.conn_pool.connect().then(
+                move |result| match result {
+                    Ok(conn) => Ok(Live::new(conn)),
+                    Err(err) => {
+                        // if we weren't able to make a new connection, we need to decrement
+                        // connections, since we preincremented the connection count for this  one
+                        conns.decrement();
+                        Err(err)
+                    }
+                },
+            )))
+        } else {
+            None
+        }
+    }
+    /// Receive a connection back to be stored in the pool. This could have one
+    /// of two outcomes:
+    /// * The connection will be passed to a waiting future, if any exist.
+    /// * The connection will be put back into the connection pool.
+    pub fn put_back(&self, conn: Live<C::Connection>) {
+        let conns = self
+            .conn_pool
+            .conns
+            .lock()
+            .expect("posioned connection mutex");
 
-    /// Returns the number of idle (ready to be used) connections in the pool. Not incredibly useful
-    /// for general runtime usuage, but can be very useful for debugging or tests.
+        // first attempt to send it to any waiting requests
+        let mut conn = conn;
+        while let Some(waiting) = self.conn_pool.try_waiting() {
+            conn = match waiting.send(conn) {
+                Ok(_) => return,
+                Err(conn) => conn,
+            };
+        }
+
+        // If there are no waiting requests & we aren't over the max idle
+        // connections limit, attempt to store it back in the pool
+        conns.store(conn);
+    }
+
+    /// The total number of connections in the pool.
+    pub fn total_conns(&self) -> usize {
+        let conns = self
+            .conn_pool
+            .conns
+            .lock()
+            .expect("posioned connection mutex");
+        conns.total()
+    }
+
+    /// The number of idle connections in the pool.
     pub fn idle_conns(&self) -> usize {
-        self.conn_pool.idle_conns()
+        let conns = self
+            .conn_pool
+            .conns
+            .lock()
+            .expect("posioned connection mutex");
+        conns.idle()
     }
 }
 
@@ -181,7 +261,7 @@ mod tests {
                 {
                     Ok(())
                 } else {
-                    panic!("connection is not correct type: {:?}", conn)
+                    panic!("connection is not correct type")
                 }
             })
         });

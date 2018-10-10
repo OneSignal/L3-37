@@ -49,6 +49,9 @@ pub trait ManageConnection: Send + Sync + 'static {
         conn: Self::Connection,
     ) -> Box<Future<Item = (), Error = L337Error<Self::Error>>>;
 
+    /// Quick check to determine if the connection has broken
+    fn has_broken(&self, conn: &mut Self::Connection) -> bool;
+
     /// Produce an error representing a connection timeout.
     fn timed_out(&self) -> L337Error<Self::Error>;
 }

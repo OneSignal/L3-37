@@ -184,14 +184,22 @@ impl<C: ManageConnection> Pool<C> {
     /// of two outcomes:
     /// * The connection will be passed to a waiting future, if any exist.
     /// * The connection will be put back into the connection pool.
-    pub fn put_back(&self, conn: Live<C::Connection>) {
-        debug!("put_back: put back?");
+    pub fn put_back(&self, mut conn: Live<C::Connection>) {
+        debug!("put_back: start put back");
+
+        let broken = self.conn_pool.has_broken(&mut conn);
         let conns = self
             .conn_pool
             .conns
             .lock()
             .expect("posioned connection mutex");
         debug!("put_back: got lock for put back");
+
+        if broken {
+            conns.decrement();
+            debug!("connection count is now: {:?}", conns.total());
+            unimplemented!();
+        }
 
         // first attempt to send it to any waiting requests
         let mut conn = conn;
@@ -259,6 +267,11 @@ mod tests {
         ) -> Box<Future<Item = (), Error = Error<Self::Error>>> {
             unimplemented!()
         }
+
+        fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
+            false
+        }
+
         /// Produce an error representing a connection timeout.
         fn timed_out(&self) -> Error<Self::Error> {
             unimplemented!()

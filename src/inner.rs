@@ -55,4 +55,8 @@ impl<C: ManageConnection> ConnectionPool<C> {
     ) -> Option<oneshot::Sender<Live<<C as ManageConnection>::Connection>>> {
         self.waiting.try_pop()
     }
+
+    pub fn has_broken(&self, conn: &mut Live<C::Connection>) -> bool {
+        self.manager.has_broken(&mut conn.conn)
+    }
 }

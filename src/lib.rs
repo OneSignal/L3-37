@@ -7,8 +7,11 @@
 extern crate crossbeam;
 extern crate futures;
 extern crate tokio;
+#[macro_use]
+extern crate failure;
 
 mod conn;
+mod error;
 mod inner;
 mod manage_connection;
 mod queue;
@@ -19,9 +22,9 @@ use futures::sync::oneshot;
 use futures::Stream;
 use std::sync::Arc;
 
+pub use conn::{Conn, ConnFuture};
 pub use manage_connection::ManageConnection;
 
-use conn::{Conn, ConnFuture};
 use inner::ConnectionPool;
 use queue::{Live, Queue};
 
@@ -35,9 +38,18 @@ pub struct Pool<C: ManageConnection> {
 pub struct Config {
     /// Minimum number of connections in the pool. The pool will be initialied with this number of
     /// connections
-    min_size: usize,
+    pub min_size: usize,
     /// Max number of connections to keep in the pool
-    max_size: usize,
+    pub max_size: usize,
+}
+
+/// Error type returned by this module
+#[derive(Debug)]
+pub enum Error<E: Send + 'static> {
+    /// Error coming from the connection pooling itself
+    Internal(error::InternalError),
+    /// Error from the connection manager or the underlying client
+    External(E),
 }
 
 impl Default for Config {
@@ -54,7 +66,7 @@ impl<C: ManageConnection> Pool<C> {
     ///
     /// The returned future will resolve to the pool if successful, which can then be used
     /// immediately.
-    pub fn new(manager: C, config: Config) -> Box<Future<Item = Pool<C>, Error = C::Error>> {
+    pub fn new(manager: C, config: Config) -> Box<Future<Item = Pool<C>, Error = Error<C::Error>>> {
         assert!(
             config.max_size >= config.min_size,
             "max_size of pool must be greater than or equal to the min_size"
@@ -87,7 +99,7 @@ impl<C: ManageConnection> Pool<C> {
     ///
     /// This **does not** implement any timeout functionality. Timeout functionality can be added
     /// by calling `.timeout` on the returned future.
-    pub fn connection(&self) -> ConnFuture<Conn<C>, C::Error> {
+    pub fn connection(&self) -> ConnFuture<Conn<C>, Error<C::Error>> {
         if let Some(conn) = self.conn_pool.get_connection() {
             future::Either::A(future::ok(Conn {
                 conn: Some(conn),
@@ -137,15 +149,20 @@ mod tests {
         type Connection = ();
         type Error = ();
 
-        fn connect(&self) -> Box<Future<Item = Self::Connection, Error = Self::Error> + 'static> {
+        fn connect(
+            &self,
+        ) -> Box<Future<Item = Self::Connection, Error = Error<Self::Error>> + 'static> {
             Box::new(future::ok(()))
         }
 
-        fn is_valid(&self, _conn: Self::Connection) -> Box<Future<Item = (), Error = Self::Error>> {
+        fn is_valid(
+            &self,
+            _conn: Self::Connection,
+        ) -> Box<Future<Item = (), Error = Error<Self::Error>>> {
             unimplemented!()
         }
         /// Produce an error representing a connection timeout.
-        fn timed_out(&self) -> Self::Error {
+        fn timed_out(&self) -> Error<Self::Error> {
             unimplemented!()
         }
     }
@@ -226,7 +243,7 @@ mod tests {
                 .then(|r| match r {
                     Ok(conn) => {
                         ::std::mem::forget(conn);
-                        Ok::<(), ()>(())
+                        Ok(())
                     }
                     Err(err) => {
                         if err.is_elapsed() {

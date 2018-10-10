@@ -22,6 +22,7 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use futures::Future;
+use Error as L337Error;
 
 /// A trait which provides connection-specific functionality.
 pub trait ManageConnection: Send + Sync + 'static {
@@ -35,14 +36,19 @@ pub trait ManageConnection: Send + Sync + 'static {
     ///
     /// Note that boxing is used here since impl Trait is not yet supported
     /// within trait definitions.
-    fn connect(&self) -> Box<Future<Item = Self::Connection, Error = Self::Error> + 'static>;
+    fn connect(
+        &self,
+    ) -> Box<Future<Item = Self::Connection, Error = L337Error<Self::Error>> + 'static>;
 
     /// Determines if the connection is still connected to the database.
     ///
     /// Note that boxing is used here since impl Trait is not yet supported
     /// within trait definitions.
-    fn is_valid(&self, conn: Self::Connection) -> Box<Future<Item = (), Error = Self::Error>>;
+    fn is_valid(
+        &self,
+        conn: Self::Connection,
+    ) -> Box<Future<Item = (), Error = L337Error<Self::Error>>>;
 
     /// Produce an error representing a connection timeout.
-    fn timed_out(&self) -> Self::Error;
+    fn timed_out(&self) -> L337Error<Self::Error>;
 }

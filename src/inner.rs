@@ -6,6 +6,7 @@ use std::sync::Arc;
 use manage_connection::ManageConnection;
 use queue::{Live, Queue};
 use Config;
+use Error;
 
 // Most of this comes from c3po's inner module: https://github.com/withoutboats/c3po/blob/08a6fde00c6506bacfe6eebe621520ee54b418bb/src/inner.rs
 // with some additions and updates to work with modern versions of tokio
@@ -63,7 +64,7 @@ impl<C: ManageConnection> ConnectionPool<C> {
     /// Otherwise, None will be returned
     pub(crate) fn try_spawn_connection(
         &self,
-    ) -> Option<Box<Future<Item = Live<C::Connection>, Error = C::Error>>> {
+    ) -> Option<Box<Future<Item = Live<C::Connection>, Error = Error<C::Error>>>> {
         if let Some(_) = self.conns.safe_increment(self.config.max_size) {
             let conns = Arc::clone(&self.conns);
             Some(Box::new(self.manager.connect().then(

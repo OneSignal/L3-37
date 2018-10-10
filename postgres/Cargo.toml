@@ -1,5 +1,5 @@
 [package]
-name = "postgres"
+name = "l337-postgres"
 version = "0.1.0"
 authors = ["Jonathon Sheffield <samsmug@gmail.com>"]
 

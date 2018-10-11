@@ -18,12 +18,14 @@ mod inner;
 mod manage_connection;
 mod queue;
 
-use futures::future::{self, Future};
+use futures::future::{self, Either, Future};
 use futures::stream;
 use futures::sync::oneshot;
 use futures::Stream;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::executor;
+use tokio::timer::Delay;
 
 pub use conn::{Conn, ConnFuture};
 pub use manage_connection::ManageConnection;
@@ -244,14 +246,20 @@ impl<C: ManageConnection + Send> Pool<C> {
                     ::std::mem::drop(conns);
 
                     this.put_back(Live::new(conn));
-                    Ok::<_, ()>(future::Loop::Break(()))
+
+                    Either::A(future::ok(future::Loop::Break(())))
                 }
                 Err(err) => {
                     error!(
                         "unable to establish new connection, trying again: {:?}",
                         err
                     );
-                    Ok(future::Loop::Continue(()))
+                    // TODO: make this use config
+                    Either::B(
+                        Delay::new(Instant::now() + Duration::from_secs(1))
+                            .map(|_| future::Loop::Continue(()))
+                            .map_err(|_e| panic!("delay timer errored, shutdown required")),
+                    )
                 }
             })
         }));

@@ -240,6 +240,9 @@ impl<C: ManageConnection + Send> Pool<C> {
                         .expect("posioned connection mutex");
                     debug!("creating new connection from spawn loop");
                     conns.increment();
+                    // Drop so we free the lock
+                    ::std::mem::drop(conns);
+
                     this.put_back(Live::new(conn));
                     Ok::<_, ()>(future::Loop::Break(()))
                 }

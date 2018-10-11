@@ -49,7 +49,8 @@ impl l3_37::ManageConnection for PostgresConnectionManager {
 
     fn connect(
         &self,
-    ) -> Box<Future<Item = Self::Connection, Error = l3_37::Error<Self::Error>> + 'static> {
+    ) -> Box<Future<Item = Self::Connection, Error = l3_37::Error<Self::Error>> + 'static + Send>
+    {
         Box::new(
             tokio_postgres::connect(self.params.clone(), (self.tls_mode)())
                 .map(|(client, connection)| {

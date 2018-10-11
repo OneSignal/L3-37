@@ -23,6 +23,7 @@ use futures::stream;
 use futures::sync::oneshot;
 use futures::Stream;
 use std::sync::Arc;
+use tokio::executor;
 
 pub use conn::{Conn, ConnFuture};
 pub use manage_connection::ManageConnection;
@@ -31,7 +32,7 @@ use inner::ConnectionPool;
 use queue::{Live, Queue};
 
 /// General connection pool
-pub struct Pool<C: ManageConnection> {
+pub struct Pool<C: ManageConnection + Send> {
     conn_pool: Arc<ConnectionPool<C>>,
 }
 
@@ -75,7 +76,7 @@ where
     }
 }
 
-impl<C: ManageConnection> Pool<C> {
+impl<C: ManageConnection + Send> Pool<C> {
     /// Creates a new connection pool
     ///
     /// The returned future will resolve to the pool if successful, which can then be used
@@ -198,7 +199,8 @@ impl<C: ManageConnection> Pool<C> {
         if broken {
             conns.decrement();
             debug!("connection count is now: {:?}", conns.total());
-            unimplemented!();
+            self.spawn_new_future_loop();
+            return;
         }
 
         // first attempt to send it to any waiting requests
@@ -218,6 +220,38 @@ impl<C: ManageConnection> Pool<C> {
         // If there are no waiting requests & we aren't over the max idle
         // connections limit, attempt to store it back in the pool
         conns.store(conn);
+    }
+
+    fn spawn_new_future_loop(&self) {
+        let this1 = self.clone();
+        executor::spawn(future::loop_fn((), move |_| {
+            let this = this1.clone();
+            this.conn_pool.connect().then(move |res| match res {
+                Ok(conn) => {
+                    // Call put_back instead of new_conn because we want to give the waiting futures
+                    // a chance to get the connection if there are any.
+                    // However, this means we have to call increment before calling put_back,
+                    // as put_back assumes that the connection already exists.
+                    // This could probably use some refactoring
+                    let conns = this
+                        .conn_pool
+                        .conns
+                        .lock()
+                        .expect("posioned connection mutex");
+                    debug!("creating new connection from spawn loop");
+                    conns.increment();
+                    this.put_back(Live::new(conn));
+                    Ok::<_, ()>(future::Loop::Break(()))
+                }
+                Err(err) => {
+                    error!(
+                        "unable to establish new connection, trying again: {:?}",
+                        err
+                    );
+                    Ok(future::Loop::Continue(()))
+                }
+            })
+        }));
     }
 
     /// The total number of connections in the pool.
@@ -257,7 +291,8 @@ mod tests {
 
         fn connect(
             &self,
-        ) -> Box<Future<Item = Self::Connection, Error = Error<Self::Error>> + 'static> {
+        ) -> Box<Future<Item = Self::Connection, Error = Error<Self::Error>> + 'static + Send>
+        {
             Box::new(future::ok(()))
         }
 

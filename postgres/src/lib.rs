@@ -7,7 +7,8 @@ pub extern crate postgres_shared;
 extern crate tokio;
 pub extern crate tokio_postgres;
 
-use futures::Future;
+use futures::sync::oneshot;
+use futures::{Async, Future};
 use tokio::executor::spawn;
 use tokio_postgres::error::Error;
 use tokio_postgres::params::ConnectParams;
@@ -19,9 +20,11 @@ type Result<T> = std::result::Result<T, Error>;
 
 pub struct AsyncConnection {
     pub client: Client,
+    broken: bool,
+    receiver: oneshot::Receiver<bool>,
 }
 
-/// A `bb8::ManageConnection` for `tokio_postgres::Connection`s.
+/// A `ManageConnection` for `tokio_postgres::Connection`s.
 pub struct PostgresConnectionManager {
     params: ConnectParams,
     tls_mode: Box<Fn() -> TlsMode + Send + Sync>,
@@ -34,7 +37,6 @@ impl PostgresConnectionManager {
         F: Fn() -> TlsMode + Send + Sync + 'static,
     {
         Ok(PostgresConnectionManager {
-            // TODO: remove this unwrap, there used to be a type this matched in tokio pg
             params: params,
             tls_mode: Box::new(tls_mode),
         })
@@ -47,12 +49,22 @@ impl l3_37::ManageConnection for PostgresConnectionManager {
 
     fn connect(
         &self,
-    ) -> Box<Future<Item = Self::Connection, Error = l3_37::Error<Self::Error>> + 'static> {
+    ) -> Box<Future<Item = Self::Connection, Error = l3_37::Error<Self::Error>> + 'static + Send>
+    {
         Box::new(
             tokio_postgres::connect(self.params.clone(), (self.tls_mode)())
                 .map(|(client, connection)| {
-                    spawn(connection.map_err(|e| panic!("{}", e)));
-                    AsyncConnection { client: client }
+                    let (sender, receiver) = oneshot::channel();
+                    spawn(connection.map_err(|_| {
+                        sender
+                            .send(true)
+                            .unwrap_or_else(|e| panic!("failed to send shutdown notice: {}", e));
+                    }));
+                    AsyncConnection {
+                        broken: false,
+                        client,
+                        receiver,
+                    }
                 }).map_err(|e| l3_37::Error::External(e)),
         )
     }
@@ -69,11 +81,25 @@ impl l3_37::ManageConnection for PostgresConnectionManager {
         )
     }
 
-    // fn has_broken(&self, conn: &mut Self::Connection) -> bool {
-    //     false
-    //     // this method was removed with no replacement?
-    //     // conn.is_desynchronized()
-    // }
+    fn has_broken(&self, conn: &mut Self::Connection) -> bool {
+        if conn.broken {
+            return true;
+        }
+
+        match conn.receiver.poll() {
+            // If we get any message, the connection task stopped, which means this connection is
+            // now dead
+            Ok(Async::Ready(_)) => {
+                conn.broken = true;
+                true
+            }
+            // If the future isn't ready, then we haven't sent a value which means the future is
+            // stil successfully running
+            Ok(Async::NotReady) => false,
+            // This should never happen, we don't shutdown the future
+            Err(err) => panic!("polling oneshot failed: {}", err),
+        }
+    }
 
     fn timed_out(&self) -> l3_37::Error<Self::Error> {
         unimplemented!()

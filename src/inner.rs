@@ -13,7 +13,7 @@ use Error;
 
 /// Inner connection pool. Handles creating and holding the connections, as well as keeping track of
 /// futures that are waiting on connections.
-pub struct ConnectionPool<C: ManageConnection> {
+pub struct ConnectionPool<C: ManageConnection + Send> {
     /// Queue of connections in the pool
     pub conns: Mutex<Arc<Queue<C::Connection>>>,
     /// Queue of oneshot's that are waiting to be given a new connection when the current pool is
@@ -40,7 +40,7 @@ impl<C: ManageConnection> ConnectionPool<C> {
         self.config.max_size
     }
 
-    pub fn connect(&self) -> Box<Future<Item = C::Connection, Error = Error<C::Error>>> {
+    pub fn connect(&self) -> Box<Future<Item = C::Connection, Error = Error<C::Error>> + Send> {
         self.manager.connect()
     }
 
@@ -54,5 +54,9 @@ impl<C: ManageConnection> ConnectionPool<C> {
         &self,
     ) -> Option<oneshot::Sender<Live<<C as ManageConnection>::Connection>>> {
         self.waiting.try_pop()
+    }
+
+    pub fn has_broken(&self, conn: &mut Live<C::Connection>) -> bool {
+        self.manager.has_broken(&mut conn.conn)
     }
 }

@@ -18,11 +18,14 @@ mod inner;
 mod manage_connection;
 mod queue;
 
-use futures::future::{self, Future};
+use futures::future::{self, Either, Future};
 use futures::stream;
 use futures::sync::oneshot;
 use futures::Stream;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::executor;
+use tokio::timer::Delay;
 
 pub use conn::{Conn, ConnFuture};
 pub use manage_connection::ManageConnection;
@@ -31,7 +34,7 @@ use inner::ConnectionPool;
 use queue::{Live, Queue};
 
 /// General connection pool
-pub struct Pool<C: ManageConnection> {
+pub struct Pool<C: ManageConnection + Send> {
     conn_pool: Arc<ConnectionPool<C>>,
 }
 
@@ -75,7 +78,7 @@ where
     }
 }
 
-impl<C: ManageConnection> Pool<C> {
+impl<C: ManageConnection + Send> Pool<C> {
     /// Creates a new connection pool
     ///
     /// The returned future will resolve to the pool if successful, which can then be used
@@ -184,14 +187,23 @@ impl<C: ManageConnection> Pool<C> {
     /// of two outcomes:
     /// * The connection will be passed to a waiting future, if any exist.
     /// * The connection will be put back into the connection pool.
-    pub fn put_back(&self, conn: Live<C::Connection>) {
-        debug!("put_back: put back?");
+    pub fn put_back(&self, mut conn: Live<C::Connection>) {
+        debug!("put_back: start put back");
+
+        let broken = self.conn_pool.has_broken(&mut conn);
         let conns = self
             .conn_pool
             .conns
             .lock()
             .expect("posioned connection mutex");
         debug!("put_back: got lock for put back");
+
+        if broken {
+            conns.decrement();
+            debug!("connection count is now: {:?}", conns.total());
+            self.spawn_new_future_loop();
+            return;
+        }
 
         // first attempt to send it to any waiting requests
         let mut conn = conn;
@@ -210,6 +222,47 @@ impl<C: ManageConnection> Pool<C> {
         // If there are no waiting requests & we aren't over the max idle
         // connections limit, attempt to store it back in the pool
         conns.store(conn);
+    }
+
+    fn spawn_new_future_loop(&self) {
+        let this1 = self.clone();
+        executor::spawn(future::loop_fn((), move |_| {
+            let this = this1.clone();
+            this.conn_pool.connect().then(move |res| match res {
+                Ok(conn) => {
+                    // Call put_back instead of new_conn because we want to give the waiting futures
+                    // a chance to get the connection if there are any.
+                    // However, this means we have to call increment before calling put_back,
+                    // as put_back assumes that the connection already exists.
+                    // This could probably use some refactoring
+                    let conns = this
+                        .conn_pool
+                        .conns
+                        .lock()
+                        .expect("posioned connection mutex");
+                    debug!("creating new connection from spawn loop");
+                    conns.increment();
+                    // Drop so we free the lock
+                    ::std::mem::drop(conns);
+
+                    this.put_back(Live::new(conn));
+
+                    Either::A(future::ok(future::Loop::Break(())))
+                }
+                Err(err) => {
+                    error!(
+                        "unable to establish new connection, trying again: {:?}",
+                        err
+                    );
+                    // TODO: make this use config
+                    Either::B(
+                        Delay::new(Instant::now() + Duration::from_secs(1))
+                            .map(|_| future::Loop::Continue(()))
+                            .map_err(|_e| panic!("delay timer errored, shutdown required")),
+                    )
+                }
+            })
+        }));
     }
 
     /// The total number of connections in the pool.
@@ -249,7 +302,8 @@ mod tests {
 
         fn connect(
             &self,
-        ) -> Box<Future<Item = Self::Connection, Error = Error<Self::Error>> + 'static> {
+        ) -> Box<Future<Item = Self::Connection, Error = Error<Self::Error>> + 'static + Send>
+        {
             Box::new(future::ok(()))
         }
 
@@ -259,6 +313,11 @@ mod tests {
         ) -> Box<Future<Item = (), Error = Error<Self::Error>>> {
             unimplemented!()
         }
+
+        fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
+            false
+        }
+
         /// Produce an error representing a connection timeout.
         fn timed_out(&self) -> Error<Self::Error> {
             unimplemented!()

@@ -3,6 +3,9 @@ jobs:
   build:
     docker: # use the docker executor type; machine and macos executors are also supported
       - image: circleci/rust:1.29
+      - image: "sfackler/rust-postgres-test:4"
+        ports:
+          - 5433:5433
     steps:
       - checkout # check out the code in the project directory
       - restore_cache:

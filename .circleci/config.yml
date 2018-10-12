@@ -10,8 +10,8 @@ jobs:
             - target-v1-{{ .Branch }}-{{ checksum "Cargo.lock" }}
             - target-v1-master-
             - target-v1-
-      - run: cargo build --release
-      - run: cargo test
+      - run: cargo build --release --all
+      - run: cargo test --all
       - save_cache:
           key: target-v1-{{ .Branch }}-{{ checksum "Cargo.lock" }}
           paths:

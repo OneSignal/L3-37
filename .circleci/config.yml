@@ -1,0 +1,21 @@
+version: 2
+jobs:
+  build:
+    docker: # use the docker executor type; machine and macos executors are also supported
+      - image: circleci/rust:1.29
+      - image: "sfackler/rust-postgres-test:4"
+        ports:
+          - 5433:5433
+    steps:
+      - checkout # check out the code in the project directory
+      - restore_cache:
+          keys:
+            - target-v1-{{ .Branch }}-{{ checksum "Cargo.toml" }}
+            - target-v1-master-
+            - target-v1-
+      - run: cargo build --release --all
+      - run: cargo test --all
+      - save_cache:
+          key: target-v1-{{ .Branch }}-{{ checksum "Cargo.toml" }}
+          paths:
+            - target/

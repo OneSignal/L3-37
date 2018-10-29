@@ -122,7 +122,10 @@ impl<C: ManageConnection + Send> Pool<C> {
     ///
     /// The returned future will resolve to the pool if successful, which can then be used
     /// immediately.
-    pub fn new(manager: C, config: Config) -> Box<Future<Item = Pool<C>, Error = Error<C::Error>>> {
+    pub fn new(
+        manager: C,
+        config: Config,
+    ) -> Box<Future<Item = Pool<C>, Error = Error<C::Error>> + Send> {
         assert!(
             config.max_size >= config.min_size,
             "max_size of pool must be greater than or equal to the min_size"

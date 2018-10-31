@@ -49,12 +49,12 @@ use crossbeam::queue::SegQueue;
 
 /// A connection, carrying with it a record of how long it has been live.
 #[derive(Debug)]
-pub struct Live<T> {
+pub struct Live<T: Send> {
     pub conn: T,
     pub live_since: Instant,
 }
 
-impl<T> Live<T> {
+impl<T: Send> Live<T> {
     pub fn new(conn: T) -> Live<T> {
         Live {
             conn: conn,
@@ -65,12 +65,12 @@ impl<T> Live<T> {
 
 /// An idle connection, carrying with it a record of how long it has been idle.
 #[derive(Debug)]
-struct Idle<T> {
+struct Idle<T: Send> {
     conn: Live<T>,
     idle_since: Instant,
 }
 
-impl<T> Idle<T> {
+impl<T: Send> Idle<T> {
     fn new(conn: Live<T>) -> Idle<T> {
         Idle {
             conn: conn,
@@ -82,13 +82,13 @@ impl<T> Idle<T> {
 /// A queue of idle connections which counts how many connections exist total
 /// (including those which are not in the queue.)
 #[derive(Debug)]
-pub struct Queue<C> {
+pub struct Queue<C: Send> {
     idle: SegQueue<Idle<C>>,
     idle_count: AtomicUsize,
     total_count: AtomicUsize,
 }
 
-impl<C> Queue<C> {
+impl<C: Send> Queue<C> {
     /// Construct an empty queue with a certain capacity
     pub fn new() -> Queue<C> {
         Queue {

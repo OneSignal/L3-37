@@ -122,7 +122,10 @@ impl<C: ManageConnection + Send> Pool<C> {
     ///
     /// The returned future will resolve to the pool if successful, which can then be used
     /// immediately.
-    pub fn new(manager: C, config: Config) -> Box<Future<Item = Pool<C>, Error = Error<C::Error>>> {
+    pub fn new(
+        manager: C,
+        config: Config,
+    ) -> Box<Future<Item = Pool<C>, Error = Error<C::Error>> + Send> {
         assert!(
             config.max_size >= config.min_size,
             "max_size of pool must be greater than or equal to the min_size"
@@ -204,7 +207,7 @@ impl<C: ManageConnection + Send> Pool<C> {
     pub(crate) fn try_spawn_connection(
         this: &Self,
         conns: &Arc<queue::Queue<<C as ManageConnection>::Connection>>,
-    ) -> Option<Box<Future<Item = Live<C::Connection>, Error = Error<C::Error>>>> {
+    ) -> Option<Box<Future<Item = Live<C::Connection>, Error = Error<C::Error>> + Send>> {
         if let Some(_) = conns.safe_increment(this.conn_pool.max_size()) {
             let conns = Arc::clone(&conns);
             Some(Box::new(this.conn_pool.connect().then(

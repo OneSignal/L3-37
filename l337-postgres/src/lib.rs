@@ -25,16 +25,16 @@ pub struct AsyncConnection {
 }
 
 /// A `ManageConnection` for `tokio_postgres::Connection`s.
-pub struct PostgresConnectionManager {
+pub struct PostgresConnectionManager<Tls> {
     params: ConnectParams,
-    tls_mode: Box<Fn() -> TlsMode + Send + Sync>,
+    tls_mode: Box<Fn() -> Tls + Send + Sync>,
 }
 
-impl PostgresConnectionManager {
+impl<S, Tls: TlsMode<S> + 'static> PostgresConnectionManager<Tls> {
     /// Create a new `PostgresConnectionManager`.
-    pub fn new<F>(params: ConnectParams, tls_mode: F) -> Result<PostgresConnectionManager>
+    pub fn new<F>(params: ConnectParams, tls_mode: F) -> Result<PostgresConnectionManager<Tls>>
     where
-        F: Fn() -> TlsMode + Send + Sync + 'static,
+        F: Fn() -> Tls + Send + Sync + 'static,
     {
         Ok(PostgresConnectionManager {
             params: params,
@@ -43,7 +43,10 @@ impl PostgresConnectionManager {
     }
 }
 
-impl l3_37::ManageConnection for PostgresConnectionManager {
+impl<S, Tls: 'static> l3_37::ManageConnection for PostgresConnectionManager<Tls>
+where
+    Tls: TlsMode<S>,
+{
     type Connection = AsyncConnection;
     type Error = Error;
 
@@ -51,22 +54,24 @@ impl l3_37::ManageConnection for PostgresConnectionManager {
         &self,
     ) -> Box<Future<Item = Self::Connection, Error = l3_37::Error<Self::Error>> + 'static + Send>
     {
-        Box::new(
-            tokio_postgres::connect(self.params.clone(), (self.tls_mode)())
-                .map(|(client, connection)| {
-                    let (sender, receiver) = oneshot::channel();
-                    spawn(connection.map_err(|_| {
-                        sender
-                            .send(true)
-                            .unwrap_or_else(|e| panic!("failed to send shutdown notice: {}", e));
-                    }));
-                    AsyncConnection {
-                        broken: false,
-                        client,
-                        receiver,
-                    }
-                }).map_err(|e| l3_37::Error::External(e)),
-        )
+        unimplemented!()
+        // Box::new(
+        //     tokio_postgres::connect(self.params.clone(), (self.tls_mode)())
+        //         .map(|(client, connection)| {
+        //             let (sender, receiver) = oneshot::channel();
+        //             spawn(connection.map_err(|_| {
+        //                 sender
+        //                     .send(true)
+        //                     .unwrap_or_else(|e| panic!("failed to send shutdown notice: {}", e));
+        //             }));
+        //             AsyncConnection {
+        //                 broken: false,
+        //                 client,
+        //                 receiver,
+        //             }
+        //         })
+        //         .map_err(|e| l3_37::Error::External(e)),
+        // )
     }
 
     fn is_valid(
@@ -107,7 +112,10 @@ impl l3_37::ManageConnection for PostgresConnectionManager {
     }
 }
 
-impl fmt::Debug for PostgresConnectionManager {
+impl<S, Tls: 'static> fmt::Debug for PostgresConnectionManager<Tls>
+where
+    Tls: TlsMode<S>,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("PostgresConnectionManager")
             .field("params", &self.params)
@@ -132,7 +140,8 @@ mod tests {
                 .into_connect_params()
                 .unwrap(),
             || tokio_postgres::TlsMode::None,
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut runtime = Runtime::new().expect("could not run");
         let config: Config = Default::default();
@@ -145,7 +154,8 @@ mod tests {
                             assert_eq!(1, row.get::<_, i32>(0));
                             Ok(())
                         })
-                    }).map(|connection| ((), connection))
+                    })
+                    .map(|connection| ((), connection))
                     .map_err(|e| l3_37::Error::External(e))
             })
         });
@@ -160,7 +170,8 @@ mod tests {
                 .into_connect_params()
                 .unwrap(),
             || tokio_postgres::TlsMode::None,
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut runtime = Runtime::new().expect("could not run");
         let config: Config = Default::default();
@@ -173,10 +184,12 @@ mod tests {
                             assert_eq!(1, row.get::<_, i32>(0));
                             Ok(())
                         })
-                    }).map(|connection| {
+                    })
+                    .map(|connection| {
                         sleep(Duration::from_secs(5));
                         ((), connection)
-                    }).map_err(|e| l3_37::Error::External(e))
+                    })
+                    .map_err(|e| l3_37::Error::External(e))
             });
 
             let q2 = pool.connection().and_then(|mut conn| {
@@ -187,10 +200,12 @@ mod tests {
                             assert_eq!(2, row.get::<_, i32>(0));
                             Ok(())
                         })
-                    }).map(|connection| {
+                    })
+                    .map(|connection| {
                         sleep(Duration::from_secs(5));
                         ((), connection)
-                    }).map_err(|e| l3_37::Error::External(e))
+                    })
+                    .map_err(|e| l3_37::Error::External(e))
             });
 
             q1.join(q2)
@@ -206,7 +221,8 @@ mod tests {
                 .into_connect_params()
                 .unwrap(),
             || tokio_postgres::TlsMode::None,
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut runtime = Runtime::new().expect("could not run");
         let config: Config = Default::default();
@@ -219,10 +235,12 @@ mod tests {
                             assert_eq!(1, row.get::<_, i32>(0));
                             Ok(())
                         })
-                    }).map(|connection| {
+                    })
+                    .map(|connection| {
                         sleep(Duration::from_secs(5));
                         ((), connection)
-                    }).map_err(|e| l3_37::Error::External(e))
+                    })
+                    .map_err(|e| l3_37::Error::External(e))
             });
 
             let q2 = pool.connection().and_then(|mut conn| {
@@ -233,10 +251,12 @@ mod tests {
                             assert_eq!(2, row.get::<_, i32>(0));
                             Ok(())
                         })
-                    }).map(|connection| {
+                    })
+                    .map(|connection| {
                         sleep(Duration::from_secs(5));
                         ((), connection)
-                    }).map_err(|e| l3_37::Error::External(e))
+                    })
+                    .map_err(|e| l3_37::Error::External(e))
             });
 
             let q3 = pool.connection().and_then(|mut conn| {
@@ -247,10 +267,12 @@ mod tests {
                             assert_eq!(3, row.get::<_, i32>(0));
                             Ok(())
                         })
-                    }).map(|connection| {
+                    })
+                    .map(|connection| {
                         sleep(Duration::from_secs(5));
                         ((), connection)
-                    }).map_err(|e| l3_37::Error::External(e))
+                    })
+                    .map_err(|e| l3_37::Error::External(e))
             });
 
             q1.join3(q2, q3)

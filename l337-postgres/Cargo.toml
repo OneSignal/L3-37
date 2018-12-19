@@ -7,5 +7,5 @@ authors = ["Jonathon Sheffield <samsmug@gmail.com>"]
 l3-37 = { path = ".." }
 futures = "0.1.14"
 tokio = "0.1.8"
-tokio-postgres = { git = "https://github.com/sfackler/rust-postgres.git", rev = "04bd98e7edb238511661b311c725a176012bca6a" }
-postgres-shared = { git = "https://github.com/sfackler/rust-postgres.git", rev = "04bd98e7edb238511661b311c725a176012bca6a" }
+tokio-postgres = { git = "https://github.com/sfackler/rust-postgres.git", rev = "a9b01b4807ab596bb366f9db6e03281a25b687b3" }
+postgres-shared = { git = "https://github.com/sfackler/rust-postgres.git", rev = "a9b01b4807ab596bb366f9db6e03281a25b687b3" }

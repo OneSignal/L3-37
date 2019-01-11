@@ -5,7 +5,7 @@ authors = ["Jonathon Sheffield <samsmug@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-l3-37 = { path = ".." }
+l337 = { path = ".." }
 futures = "0.1"
 tokio = "0.1"
 tokio-postgres = { git = "https://github.com/sfackler/rust-postgres.git", rev = "dfc614bed1ce88b5a978f1ffcd7dfe5a39c19b10" }

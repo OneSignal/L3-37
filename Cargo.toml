@@ -1,15 +1,16 @@
 [package]
 name = "l3-37"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["Jonathon Sheffield <samsmug@gmail.com>", "Joe Wilm <joe@jwilm.com>"]
 license = "MIT OR Apache-2.0"
 description = "yet another connection pooler"
+edition = "2018"
 
 [dependencies]
-futures = "0.1.14"
-tokio = "0.1.8"
+futures = "0.1"
+tokio = "0.1"
 crossbeam = "0.4"
-failure = "0.1.2"
+failure = "0.1"
 log = "0.4"
 
 [workspace]

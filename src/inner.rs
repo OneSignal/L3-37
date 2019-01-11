@@ -45,10 +45,10 @@ use futures::sync::oneshot;
 use futures::Future;
 use std::sync::{Arc, Mutex};
 
-use manage_connection::ManageConnection;
-use queue::{Live, Queue};
-use Config;
-use Error;
+use crate::manage_connection::ManageConnection;
+use crate::queue::{Live, Queue};
+use crate::Config;
+use crate::Error;
 
 /// Inner connection pool. Handles creating and holding the connections, as well as keeping track of
 /// futures that are waiting on connections.

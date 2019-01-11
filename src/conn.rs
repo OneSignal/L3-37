@@ -42,9 +42,9 @@
 use futures::future::{self, Future};
 use std::ops::{Deref, DerefMut};
 
-use manage_connection::ManageConnection;
-use queue::Live;
-use Pool;
+use crate::manage_connection::ManageConnection;
+use crate::queue::Live;
+use crate::Pool;
 
 /// Connection future
 pub type ConnFuture<T, E> =
@@ -89,10 +89,10 @@ impl<C: ManageConnection> Drop for Conn<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tests::DummyManager;
+    use crate::tests::DummyManager;
+    use crate::Config;
+    use crate::Pool;
     use tokio::runtime::current_thread::Runtime;
-    use Config;
-    use Pool;
 
     #[test]
     fn conn_pushes_back_into_pool_after_drop() {

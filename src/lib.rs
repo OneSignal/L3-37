@@ -43,14 +43,6 @@
 //!
 //! Any connection type that implements the `ManageConnection` trait can be used with this libary.
 
-extern crate crossbeam;
-extern crate futures;
-extern crate tokio;
-#[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate log;
-
 mod conn;
 mod error;
 mod inner;
@@ -61,16 +53,17 @@ use futures::future::{self, Either, Future};
 use futures::stream;
 use futures::sync::oneshot;
 use futures::Stream;
+use log::{debug, error};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::executor;
 use tokio::timer::Delay;
 
-pub use conn::{Conn, ConnFuture};
-pub use manage_connection::ManageConnection;
+pub use self::conn::{Conn, ConnFuture};
+pub use self::manage_connection::ManageConnection;
 
-use inner::ConnectionPool;
-use queue::{Live, Queue};
+use self::inner::ConnectionPool;
+use self::queue::{Live, Queue};
 
 /// General connection pool
 pub struct Pool<C: ManageConnection + Send> {
@@ -197,7 +190,8 @@ impl<C: ManageConnection + Send> Pool<C> {
                         conn: Some(conn),
                         pool: this,
                     }
-                }).map_err(|_err| unimplemented!()),
+                })
+                .map_err(|_err| unimplemented!()),
             ))
         }
     }
@@ -208,7 +202,7 @@ impl<C: ManageConnection + Send> Pool<C> {
         this: &Self,
         conns: &Arc<queue::Queue<<C as ManageConnection>::Connection>>,
     ) -> Option<Box<Future<Item = Live<C::Connection>, Error = Error<C::Error>> + Send>> {
-        if let Some(_) = conns.safe_increment(this.conn_pool.max_size()) {
+        if conns.safe_increment(this.conn_pool.max_size()).is_some() {
             let conns = Arc::clone(&conns);
             Some(Box::new(this.conn_pool.connect().then(
                 move |result| match result {

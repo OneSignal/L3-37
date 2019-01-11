@@ -21,9 +21,9 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use crate::Error as L337Error;
 use futures::Future;
 use std::fmt::Debug;
-use Error as L337Error;
 
 /// A trait which provides connection-specific functionality.
 pub trait ManageConnection: Send + Sync + 'static {

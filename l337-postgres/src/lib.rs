@@ -34,7 +34,7 @@ impl<M> PostgresConnectionManager<M> {
     }
 }
 
-impl<M> l3_37::ManageConnection for PostgresConnectionManager<M>
+impl<M> l337::ManageConnection for PostgresConnectionManager<M>
 where
     M: MakeTlsMode<Socket> + Clone + Send + Sync + 'static,
     M::Stream: Send,
@@ -46,7 +46,7 @@ where
 
     fn connect(
         &self,
-    ) -> Box<Future<Item = Self::Connection, Error = l3_37::Error<Self::Error>> + 'static + Send>
+    ) -> Box<Future<Item = Self::Connection, Error = l337::Error<Self::Error>> + 'static + Send>
     {
         Box::new(
             tokio_postgres::connect(&self.connect_config, self.tls_mode.clone())
@@ -63,19 +63,19 @@ where
                         receiver,
                     }
                 })
-                .map_err(l3_37::Error::External),
+                .map_err(l337::Error::External),
         )
     }
 
     fn is_valid(
         &self,
         mut conn: Self::Connection,
-    ) -> Box<Future<Item = (), Error = l3_37::Error<Self::Error>>> {
+    ) -> Box<Future<Item = (), Error = l337::Error<Self::Error>>> {
         // If we can execute this without erroring, we're definitely still connected to the datbase
         Box::new(
             conn.client
                 .batch_execute("")
-                .map_err(l3_37::Error::External),
+                .map_err(l337::Error::External),
         )
     }
 
@@ -99,7 +99,7 @@ where
         }
     }
 
-    fn timed_out(&self) -> l3_37::Error<Self::Error> {
+    fn timed_out(&self) -> l337::Error<Self::Error> {
         unimplemented!()
         // Error::io(io::ErrorKind::TimedOut.into())
     }
@@ -117,7 +117,7 @@ impl<M> std::fmt::Debug for PostgresConnectionManager<M> {
 mod tests {
     use super::*;
     use futures::Stream;
-    use l3_37::{Config, Pool};
+    use l337::{Config, Pool};
     use std::thread::sleep;
     use std::time::Duration;
     use tokio::runtime::current_thread::Runtime;
@@ -144,7 +144,7 @@ mod tests {
                         })
                     })
                     .map(|connection| ((), connection))
-                    .map_err(l3_37::Error::External)
+                    .map_err(l337::Error::External)
             })
         });
 
@@ -175,7 +175,7 @@ mod tests {
                         sleep(Duration::from_secs(5));
                         ((), connection)
                     })
-                    .map_err(l3_37::Error::External)
+                    .map_err(l337::Error::External)
             });
 
             let q2 = pool.connection().and_then(|mut conn| {
@@ -191,7 +191,7 @@ mod tests {
                         sleep(Duration::from_secs(5));
                         ((), connection)
                     })
-                    .map_err(l3_37::Error::External)
+                    .map_err(l337::Error::External)
             });
 
             q1.join(q2)
@@ -224,7 +224,7 @@ mod tests {
                         sleep(Duration::from_secs(5));
                         ((), connection)
                     })
-                    .map_err(l3_37::Error::External)
+                    .map_err(l337::Error::External)
             });
 
             let q2 = pool.connection().and_then(|mut conn| {
@@ -240,7 +240,7 @@ mod tests {
                         sleep(Duration::from_secs(5));
                         ((), connection)
                     })
-                    .map_err(l3_37::Error::External)
+                    .map_err(l337::Error::External)
             });
 
             let q3 = pool.connection().and_then(|mut conn| {
@@ -256,7 +256,7 @@ mod tests {
                         sleep(Duration::from_secs(5));
                         ((), connection)
                     })
-                    .map_err(l3_37::Error::External)
+                    .map_err(l337::Error::External)
             });
 
             q1.join3(q2, q3)

@@ -5,7 +5,7 @@ use futures::sync::oneshot;
 use futures::{Async, Future};
 use tokio::executor::spawn;
 use tokio_postgres::error::Error;
-use tokio_postgres::{Client, MakeTlsMode, Socket, TlsMode};
+use tokio_postgres::{Client, MakeTlsConnect, Socket, TlsConnect};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -36,10 +36,10 @@ impl<M> PostgresConnectionManager<M> {
 
 impl<M> l337::ManageConnection for PostgresConnectionManager<M>
 where
-    M: MakeTlsMode<Socket> + Clone + Send + Sync + 'static,
+    M: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     M::Stream: Send,
-    M::TlsMode: Send,
-    <<M as MakeTlsMode<Socket>>::TlsMode as TlsMode<Socket>>::Future: Send,
+    M::TlsConnect: Send,
+    <<M as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     type Connection = AsyncConnection;
     type Error = Error;
@@ -72,11 +72,7 @@ where
         mut conn: Self::Connection,
     ) -> Box<Future<Item = (), Error = l337::Error<Self::Error>>> {
         // If we can execute this without erroring, we're definitely still connected to the datbase
-        Box::new(
-            conn.client
-                .batch_execute("")
-                .map_err(l337::Error::External),
-        )
+        Box::new(conn.client.batch_execute("").map_err(l337::Error::External))
     }
 
     fn has_broken(&self, conn: &mut Self::Connection) -> bool {

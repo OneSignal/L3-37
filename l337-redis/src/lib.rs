@@ -2,7 +2,7 @@
 // #![deny(missing_docs, missing_debug_implementations)]
 
 extern crate futures;
-pub extern crate l3_37;
+pub extern crate l337;
 extern crate redis;
 extern crate tokio;
 
@@ -31,7 +31,7 @@ impl RedisConnectionManager {
 /// As a todo, we might want to consider improving the redis-rs api or switching to a different lib
 /// Looking at the tests will make why this struct is needed clear, but basically it requires
 /// an owned version of conn so we can't use deref to make everything work nice.
-pub struct AsyncConnection(pub l3_37::Conn<RedisConnectionManager>);
+pub struct AsyncConnection(pub l337::Conn<RedisConnectionManager>);
 
 impl ConnectionLike for AsyncConnection {
     fn req_packed_command(
@@ -63,30 +63,30 @@ impl ConnectionLike for AsyncConnection {
     }
 }
 
-impl l3_37::ManageConnection for RedisConnectionManager {
+impl l337::ManageConnection for RedisConnectionManager {
     type Connection = SharedConnection;
     type Error = RedisError;
 
     fn connect(
         &self,
-    ) -> Box<Future<Item = Self::Connection, Error = l3_37::Error<Self::Error>> + 'static + Send>
+    ) -> Box<Future<Item = Self::Connection, Error = l337::Error<Self::Error>> + 'static + Send>
     {
         Box::new(
             self.client
                 .get_shared_async_connection()
-                .map_err(l3_37::Error::External),
+                .map_err(l337::Error::External),
         )
     }
 
     fn is_valid(
         &self,
         conn: Self::Connection,
-    ) -> Box<Future<Item = (), Error = l3_37::Error<Self::Error>>> {
+    ) -> Box<Future<Item = (), Error = l337::Error<Self::Error>>> {
         Box::new(
             redis::cmd("PING")
                 .query_async::<_, ()>(conn)
                 .map(|_| ())
-                .map_err(|e| l3_37::Error::External(e)),
+                .map_err(|e| l337::Error::External(e)),
         )
     }
 
@@ -94,7 +94,7 @@ impl l3_37::ManageConnection for RedisConnectionManager {
         false
     }
 
-    fn timed_out(&self) -> l3_37::Error<Self::Error> {
+    fn timed_out(&self) -> l337::Error<Self::Error> {
         unimplemented!()
     }
 }
@@ -102,7 +102,7 @@ impl l3_37::ManageConnection for RedisConnectionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use l3_37::{Config, Pool};
+    use l337::{Config, Pool};
     use tokio::runtime::Runtime;
 
     #[test]
@@ -117,7 +117,7 @@ mod tests {
                 redis::cmd("PING")
                     .query_async::<_, ()>(AsyncConnection(conn))
                     .map(|_| println!("done ping"))
-                    .map_err(|e| l3_37::Error::External(e))
+                    .map_err(|e| l337::Error::External(e))
             })
         });
 

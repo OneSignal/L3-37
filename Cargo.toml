@@ -15,4 +15,5 @@ log = "0.4"
 [workspace]
 members = [
   "l337-postgres",
+  "l337-redis"
 ]

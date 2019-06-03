@@ -28,7 +28,7 @@ pub struct PostgresConnectionManager<T>
 where
     T: 'static + MakeTlsConnect<Socket> + Clone + Send + Sync,
 {
-    config: String,
+    config: tokio_postgres::Config,
     make_tls_connect: T,
 }
 
@@ -37,7 +37,7 @@ where
     T: 'static + MakeTlsConnect<Socket> + Clone + Send + Sync,
 {
     /// Create a new `PostgresConnectionManager`.
-    pub fn new(config: String, make_tls_connect: T) -> Self {
+    pub fn new(config: tokio_postgres::Config, make_tls_connect: T) -> Self {
         Self {
             config,
             make_tls_connect,
@@ -60,7 +60,8 @@ where
     ) -> Box<Future<Item = Self::Connection, Error = l337::Error<Self::Error>> + 'static + Send>
     {
         Box::new(
-            tokio_postgres::connect(&self.config, self.make_tls_connect.clone())
+            self.config
+                .connect(self.make_tls_connect.clone())
                 .map(|(client, connection)| {
                     let (sender, receiver) = oneshot::channel();
                     spawn(connection.map_err(|_| {
@@ -141,7 +142,9 @@ mod tests {
     #[test]
     fn it_works() {
         let mngr = PostgresConnectionManager::new(
-            "postgres://pass_user:password@localhost:5433/postgres".to_string(),
+            "postgres://pass_user:password@localhost:5433/postgres"
+                .parse()
+                .unwrap(),
             tokio_postgres::NoTls,
         );
 
@@ -168,7 +171,9 @@ mod tests {
     #[test]
     fn it_allows_multiple_queries_at_the_same_time() {
         let mngr = PostgresConnectionManager::new(
-            "postgres://pass_user:password@localhost:5433/postgres".to_string(),
+            "postgres://pass_user:password@localhost:5433/postgres"
+                .parse()
+                .unwrap(),
             tokio_postgres::NoTls,
         );
 
@@ -216,7 +221,9 @@ mod tests {
     #[test]
     fn it_reuses_connections() {
         let mngr = PostgresConnectionManager::new(
-            "postgres://pass_user:password@localhost:5433/postgres".to_string(),
+            "postgres://pass_user:password@localhost:5433/postgres"
+                .parse()
+                .unwrap(),
             tokio_postgres::NoTls,
         );
 

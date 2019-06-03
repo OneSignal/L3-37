@@ -8,4 +8,3 @@ l337 = { path = ".." }
 futures = "0.1.14"
 tokio = "0.1.8"
 tokio-postgres = { git = "https://github.com/sfackler/rust-postgres.git" }
-postgres-shared = { git = "https://github.com/sfackler/rust-postgres.git" }

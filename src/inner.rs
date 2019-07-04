@@ -79,7 +79,7 @@ impl<C: ManageConnection> ConnectionPool<C> {
         self.config.max_size
     }
 
-    pub fn connect(&self) -> Box<Future<Item = C::Connection, Error = Error<C::Error>> + Send> {
+    pub fn connect(&self) -> Box<dyn Future<Item = C::Connection, Error = Error<C::Error>> + Send> {
         self.manager.connect()
     }
 

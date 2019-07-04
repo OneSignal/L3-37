@@ -39,7 +39,7 @@ pub trait ManageConnection: Send + Sync + 'static {
     /// within trait definitions.
     fn connect(
         &self,
-    ) -> Box<Future<Item = Self::Connection, Error = L337Error<Self::Error>> + 'static + Send>;
+    ) -> Box<dyn Future<Item = Self::Connection, Error = L337Error<Self::Error>> + 'static + Send>;
 
     /// Determines if the connection is still connected to the database.
     ///
@@ -48,7 +48,7 @@ pub trait ManageConnection: Send + Sync + 'static {
     fn is_valid(
         &self,
         conn: Self::Connection,
-    ) -> Box<Future<Item = (), Error = L337Error<Self::Error>>>;
+    ) -> Box<dyn Future<Item = (), Error = L337Error<Self::Error>>>;
 
     /// Quick check to determine if the connection has broken
     fn has_broken(&self, conn: &mut Self::Connection) -> bool;

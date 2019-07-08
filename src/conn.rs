@@ -48,7 +48,7 @@ use Pool;
 
 /// Connection future
 pub type ConnFuture<T, E> =
-    future::Either<future::FutureResult<T, E>, Box<Future<Item = T, Error = E> + Send>>;
+    future::Either<future::FutureResult<T, E>, Box<dyn Future<Item = T, Error = E> + Send>>;
 
 // From c3po, https://github.com/withoutboats/c3po/blob/08a6fde00c6506bacfe6eebe621520ee54b418bb/src/lib.rs#L40
 

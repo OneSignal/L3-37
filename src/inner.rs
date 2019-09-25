@@ -89,6 +89,10 @@ impl<C: ManageConnection> ConnectionPool<C> {
         self.waiting.push(tx);
     }
 
+    pub fn has_waiting(&self) -> bool {
+        !self.waiting.is_empty()
+    }
+
     pub fn try_waiting(
         &self,
     ) -> Option<oneshot::Sender<Live<<C as ManageConnection>::Connection>>> {

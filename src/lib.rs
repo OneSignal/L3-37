@@ -244,7 +244,11 @@ impl<C: ManageConnection + Send> Pool<C> {
         if broken {
             conns.decrement();
             debug!("connection count is now: {:?}", conns.total());
-            self.spawn_new_future_loop();
+            // Spawn a future to grab a new connection if there is
+            // someone waiting for a new connection.
+            if self.conn_pool.has_waiting() {
+                self.spawn_new_future_loop();
+            }
             return;
         }
 

@@ -98,16 +98,19 @@ where
             return true;
         }
 
-        match conn.receiver.poll() {
+        // Use try_recv() as `has_broken` can be called via Drop
+        // and not have a future Context to poll on.
+        // https://docs.rs/futures/0.1.28/futures/sync/oneshot/struct.Receiver.html#method.try_recv
+        match conn.receiver.try_recv() {
             // If we get any message, the connection task stopped, which means this connection is
             // now dead
-            Ok(Async::Ready(_)) => {
+            Ok(Some(_)) => {
                 conn.broken = true;
                 true
             }
             // If the future isn't ready, then we haven't sent a value which means the future is
             // still successfully running
-            Ok(Async::NotReady) => false,
+            Ok(None) => false,
             // This should never happen, we don't shutdown the future
             Err(err) => panic!("polling oneshot failed: {}", err),
         }

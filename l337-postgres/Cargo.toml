@@ -8,3 +8,4 @@ l337 = { path = ".." }
 futures = "0.1.14"
 tokio = "0.1.8"
 tokio-postgres = "0.4.0-rc.2"
+log = "0.4.8"

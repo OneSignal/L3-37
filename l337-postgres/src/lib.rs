@@ -6,6 +6,9 @@ pub extern crate l337;
 extern crate tokio;
 pub extern crate tokio_postgres;
 
+#[macro_use]
+extern crate log;
+
 use futures::sync::oneshot;
 use futures::{Async, Future, Stream};
 use tokio::executor::spawn;
@@ -111,8 +114,13 @@ where
             // If the future isn't ready, then we haven't sent a value which means the future is
             // still successfully running
             Ok(None) => false,
-            // This should never happen, we don't shutdown the future
-            Err(err) => panic!("polling oneshot failed: {}", err),
+            // This can happen if the future that the connection was
+            // spawned in panicked or was dropped.
+            Err(err) => {
+                warn!("cannot receive from connection future - err: {}", err);
+                conn.broken = true;
+                true
+            }
         }
     }
 

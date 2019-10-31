@@ -1,10 +1,10 @@
 [package]
 name = "l337-redis"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Jonathon Sheffield <samsmug@gmail.com>"]
 
 [dependencies]
 l337 = { path = ".." }
 futures = "0.1.14"
 tokio = "0.1.8"
-redis = "0.9.0"
+redis = "0.13.0"

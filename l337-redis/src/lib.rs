@@ -7,7 +7,7 @@ extern crate redis;
 extern crate tokio;
 
 use futures::Future;
-use redis::async::{ConnectionLike, SharedConnection};
+use redis::aio::{ConnectionLike, SharedConnection};
 use redis::{Client, IntoConnectionInfo, RedisError};
 
 type Result<T> = std::result::Result<T, RedisError>;
@@ -37,7 +37,7 @@ impl ConnectionLike for AsyncConnection {
     fn req_packed_command(
         self,
         cmd: Vec<u8>,
-    ) -> Box<Future<Item = (Self, redis::Value), Error = RedisError> + Send> {
+    ) -> Box<dyn Future<Item = (Self, redis::Value), Error = RedisError> + Send> {
         let conn = self.0.clone();
         Box::new(
             conn.req_packed_command(cmd)
@@ -50,7 +50,7 @@ impl ConnectionLike for AsyncConnection {
         cmd: Vec<u8>,
         offset: usize,
         count: usize,
-    ) -> Box<Future<Item = (Self, Vec<redis::Value>), Error = RedisError> + Send> {
+    ) -> Box<dyn Future<Item = (Self, Vec<redis::Value>), Error = RedisError> + Send> {
         let conn = self.0.clone();
         Box::new(
             conn.req_packed_commands(cmd, offset, count)
@@ -69,7 +69,7 @@ impl l337::ManageConnection for RedisConnectionManager {
 
     fn connect(
         &self,
-    ) -> Box<Future<Item = Self::Connection, Error = l337::Error<Self::Error>> + 'static + Send>
+    ) -> Box<dyn Future<Item = Self::Connection, Error = l337::Error<Self::Error>> + 'static + Send>
     {
         Box::new(
             self.client
@@ -81,7 +81,7 @@ impl l337::ManageConnection for RedisConnectionManager {
     fn is_valid(
         &self,
         conn: Self::Connection,
-    ) -> Box<Future<Item = (), Error = l337::Error<Self::Error>>> {
+    ) -> Box<dyn Future<Item = (), Error = l337::Error<Self::Error>>> {
         Box::new(
             redis::cmd("PING")
                 .query_async::<_, ()>(conn)

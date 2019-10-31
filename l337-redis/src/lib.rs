@@ -7,7 +7,7 @@ extern crate redis;
 extern crate tokio;
 
 use futures::Future;
-use redis::async::{ConnectionLike, SharedConnection};
+use redis::aio::{ConnectionLike, SharedConnection};
 use redis::{Client, IntoConnectionInfo, RedisError};
 
 type Result<T> = std::result::Result<T, RedisError>;

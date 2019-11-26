@@ -207,11 +207,11 @@ impl<C: ManageConnection + Send> Pool<C> {
         }*/
         let conn = match conns.get() {
             Some(conn) => {
-                println!("connection: connection already in pool and ready to go");
+                debug!("connection: connection already in pool and ready to go");
                 Ok(conn)
             }
             None => {
-                println!("connection: try spawn connection");
+                debug!("connection: try spawn connection");
                 match Self::try_spawn_connection(&self, &conns).await {
                     Some(result) => result,
                     None => {

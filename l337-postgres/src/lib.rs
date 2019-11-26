@@ -54,12 +54,9 @@ where
     type Connection = tokio_postgres::Client;
     type Error = Error;
     async fn connect(&self) -> Result<Self::Connection, l337::Error<Self::Error>> {
-        println!("Spawning postgres connection");
         let result = self.config.connect(self.make_tls_connect.clone()).await;
-        println!("Connected to postgres db");
         let (client, connection) = result.map_err(|err| l337::Error::External(err))?;
         spawn(connection.map(|_| {}));
-        println!("Returning connection");
         Ok(client)
     }
     async fn is_valid(&self, conn: Self::Connection) -> Result<(), l337::Error<Self::Error>> {
@@ -150,7 +147,6 @@ mod tests {
             };
             let q2 = async {
                 let conn = pool.connection().await.unwrap();
-                println!("Q2 got connection");
                 let select = conn.prepare("SELECT 2::INT4").await.unwrap();
                 let rows = conn.query(&select, &[]).await.unwrap();
                 for row in rows {
@@ -189,7 +185,6 @@ mod tests {
             };
             let q2 = async {
                 let conn = pool.connection().await.unwrap();
-                println!("Q2 got connection");
                 let select = conn.prepare("SELECT 2::INT4").await.unwrap();
                 let rows = conn.query(&select, &[]).await.unwrap();
                 for row in rows {
@@ -200,7 +195,6 @@ mod tests {
             };
             let q3 = async {
                 let conn = pool.connection().await.unwrap();
-                println!("Q2 got connection");
                 let select = conn.prepare("SELECT 3::INT4").await.unwrap();
                 let rows = conn.query(&select, &[]).await.unwrap();
                 for row in rows {

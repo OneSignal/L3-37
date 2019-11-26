@@ -89,6 +89,30 @@ pub enum Error<E: Send + 'static> {
     External(E),
 }
 
+impl<E> std::error::Error for Error<E>
+where
+    E: std::error::Error + 'static + Send + Sync,
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::Internal(error) => Some(error),
+            Error::External(error) => Some(error),
+        }
+    }
+}
+
+impl<E> std::fmt::Display for Error<E>
+where
+    E: std::error::Error + 'static + Send + Sync,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Error::Internal(error) => write!(f, "internal error: {}", error),
+            Error::External(error) => write!(f, "external error: {}", error),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {

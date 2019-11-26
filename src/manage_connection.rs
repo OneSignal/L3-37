@@ -23,7 +23,7 @@
 
 use crate::Error as L337Error;
 use async_trait::async_trait;
-use futures::Future;
+
 use std::fmt::Debug;
 
 /// A trait which provides connection-specific functionality.

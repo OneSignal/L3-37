@@ -49,7 +49,6 @@ mod inner;
 mod manage_connection;
 mod queue;
 
-use async_trait::async_trait;
 use futures::stream::{self, StreamExt};
 use log::{debug, error};
 use std::iter::Iterator;
@@ -168,11 +167,7 @@ impl<C: ManageConnection + Send> Pool<C> {
     /// This **does not** implement any timeout functionality. Timeout functionality can be added
     /// by calling `.timeout` on the returned future.
     pub async fn connection(&self) -> Result<Conn<C>, Error<C::Error>> {
-        let conns = self
-            .conn_pool
-            .conns
-            .lock()
-            .expect("posioned connection mutex");
+        let conns = self.conn_pool.conns.lock().await;
         /*
         debug!("connection: acquired connection lock");
         if let Some(conn) = conns.get() {
@@ -264,90 +259,47 @@ impl<C: ManageConnection + Send> Pool<C> {
     /// * The connection will be put back into the connection pool.
     pub fn put_back(&self, mut conn: Live<C::Connection>) {
         debug!("put_back: start put back");
+        let conn_pool = Arc::clone(&self.conn_pool);
+        executor::spawn(async move {
+            let broken = conn_pool.has_broken(&mut conn);
+            let conns = conn_pool.conns.lock().await;
+            debug!("put_back: got lock for put back");
 
-        let broken = self.conn_pool.has_broken(&mut conn);
-        let conns = self
-            .conn_pool
-            .conns
-            .lock()
-            .expect("posioned connection mutex");
-        debug!("put_back: got lock for put back");
+            if broken {
+                conns.decrement();
+                debug!("connection count is now: {:?}", conns.total());
+                //self.spawn_new_future_loop();
+                return;
+            }
 
-        if broken {
-            conns.decrement();
-            debug!("connection count is now: {:?}", conns.total());
-            self.spawn_new_future_loop();
-            return;
-        }
+            // first attempt to send it to any waiting requests
+            let mut conn = conn;
+            while let Some(waiting) = conn_pool.try_waiting() {
+                debug!("put_back: got a waiting connection, sending");
+                conn = match waiting.send(conn) {
+                    Ok(_) => return,
+                    Err(conn) => {
+                        debug!("put_back: unable to send connection");
+                        conn
+                    }
+                };
+            }
+            debug!("put_back: no waiting connection, storing");
 
-        // first attempt to send it to any waiting requests
-        let mut conn = conn;
-        while let Some(waiting) = self.conn_pool.try_waiting() {
-            debug!("put_back: got a waiting connection, sending");
-            conn = match waiting.send(conn) {
-                Ok(_) => return,
-                Err(conn) => {
-                    debug!("put_back: unable to send connection");
-                    conn
-                }
-            };
-        }
-        debug!("put_back: no waiting connection, storing");
-
-        // If there are no waiting requests & we aren't over the max idle
-        // connections limit, attempt to store it back in the pool
-        conns.store(conn);
+            // If there are no waiting requests & we aren't over the max idle
+            // connections limit, attempt to store it back in the pool
+            conns.store(conn);
+        });
     }
 
     fn spawn_new_future_loop(&self) {
         let this1 = self.clone();
-        /*executor::spawn(future::loop_fn((), move |_| {
-            let this = this1.clone();
-            this.conn_pool.connect().then(move |res| match res {
-                Ok(conn) => {
-                    // Call put_back instead of new_conn because we want to give the waiting futures
-                    // a chance to get the connection if there are any.
-                    // However, this means we have to call increment before calling put_back,
-                    // as put_back assumes that the connection already exists.
-                    // This could probably use some refactoring
-                    let conns = this
-                        .conn_pool
-                        .conns
-                        .lock()
-                        .expect("posioned connection mutex");
-                    debug!("creating new connection from spawn loop");
-                    conns.increment();
-                    // Drop so we free the lock
-                    ::std::mem::drop(conns);
-
-                    this.put_back(Live::new(conn));
-
-                    Either::A(future::ok(future::Loop::Break(())))
-                }
-                Err(err) => {
-                    error!(
-                        "unable to establish new connection, trying again: {:?}",
-                        err
-                    );
-                    // TODO: make this use config
-                    Either::B(
-                        Delay::new(Instant::now() + Duration::from_secs(1))
-                            .map(|_| future::Loop::Continue(()))
-                            .map_err(|_e| panic!("delay timer errored, shutdown required")),
-                    )
-                }
-            })
-        }));*/
         executor::spawn(async move {
             loop {
                 let this = this1.clone();
                 match this.conn_pool.connect().await {
                     Ok(conn) => {
-                        let conns = this
-                            .conn_pool
-                            .conns
-                            .lock()
-                            .expect("posioned connection mutex");
+                        let conns = this.conn_pool.conns.lock().await;
                         debug!("creating new connection from spawn loop");
                         conns.increment();
                         ::std::mem::drop(conns);
@@ -368,22 +320,14 @@ impl<C: ManageConnection + Send> Pool<C> {
     }
 
     /// The total number of connections in the pool.
-    pub fn total_conns(&self) -> usize {
-        let conns = self
-            .conn_pool
-            .conns
-            .lock()
-            .expect("posioned connection mutex");
+    pub async fn total_conns(&self) -> usize {
+        let conns = self.conn_pool.conns.lock().await;
         conns.total()
     }
 
     /// The number of idle connections in the pool.
-    pub fn idle_conns(&self) -> usize {
-        let conns = self
-            .conn_pool
-            .conns
-            .lock()
-            .expect("posioned connection mutex");
+    pub async fn idle_conns(&self) -> usize {
+        let conns = self.conn_pool.conns.lock().await;
         conns.idle()
     }
 }
@@ -391,6 +335,7 @@ impl<C: ManageConnection + Send> Pool<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use futures::future::FutureExt;
     use futures::join;
     use std::time::Duration;

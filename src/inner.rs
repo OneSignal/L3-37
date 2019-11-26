@@ -41,9 +41,10 @@
 // limitations under the License.
 
 use crossbeam::queue::SegQueue;
-use futures::Future;
-use std::sync::{Arc, Mutex};
+
+use std::sync::Arc;
 use tokio::sync::oneshot;
+use tokio::sync::Mutex;
 
 use crate::manage_connection::ManageConnection;
 use crate::queue::{Live, Queue};

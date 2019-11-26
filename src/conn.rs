@@ -39,7 +39,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use futures::{self, Future};
+use futures::{self, executor::block_on, Future};
 //use std::future::{self, Future};
 use std::ops::{Deref, DerefMut};
 
@@ -104,11 +104,11 @@ mod tests {
 
         Runtime::new().expect("could not run").block_on(async {
             let pool = Pool::new(mngr, config).await.unwrap();
-            assert_eq!(pool.idle_conns(), 2);
+            assert_eq!(pool.idle_conns().await, 2);
             let conn = pool.connection().await.unwrap();
-            assert_eq!(pool.idle_conns(), 1);
+            assert_eq!(pool.idle_conns().await, 1);
             ::std::mem::drop(conn);
-            assert_eq!(pool.idle_conns(), 2);
+            assert_eq!(pool.idle_conns().await, 2);
         });
     }
 }

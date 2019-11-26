@@ -2,10 +2,12 @@
 name = "l337-postgres"
 version = "0.2.0"
 authors = ["Jonathon Sheffield <samsmug@gmail.com>"]
+edition = "2018"
 
 [dependencies]
 l337 = { path = ".." }
-futures = "0.1.14"
-tokio = "0.1.8"
-tokio-postgres = "0.4.0-rc.2"
+futures = "0.3"
+tokio = "=0.2.0-alpha.6"
+tokio-postgres = {git = "https://github.com/sfackler/rust-postgres.git",  features = ["with-uuid-0_8"] }
 log = "0.4.8"
+async-trait = "0.1.19"

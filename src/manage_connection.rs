@@ -21,11 +21,13 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use crate::Error as L337Error;
+use async_trait::async_trait;
 use futures::Future;
 use std::fmt::Debug;
-use Error as L337Error;
 
 /// A trait which provides connection-specific functionality.
+#[async_trait]
 pub trait ManageConnection: Send + Sync + 'static {
     /// The connection type this manager deals with.
     type Connection: Send + 'static;
@@ -37,18 +39,13 @@ pub trait ManageConnection: Send + Sync + 'static {
     ///
     /// Note that boxing is used here since impl Trait is not yet supported
     /// within trait definitions.
-    fn connect(
-        &self,
-    ) -> Box<dyn Future<Item = Self::Connection, Error = L337Error<Self::Error>> + 'static + Send>;
+    async fn connect(&self) -> Result<Self::Connection, L337Error<Self::Error>>;
 
     /// Determines if the connection is still connected to the database.
     ///
     /// Note that boxing is used here since impl Trait is not yet supported
     /// within trait definitions.
-    fn is_valid(
-        &self,
-        conn: Self::Connection,
-    ) -> Box<dyn Future<Item = (), Error = L337Error<Self::Error>>>;
+    async fn is_valid(&self, conn: Self::Connection) -> Result<(), L337Error<Self::Error>>;
 
     /// Quick check to determine if the connection has broken
     fn has_broken(&self, conn: &mut Self::Connection) -> bool;

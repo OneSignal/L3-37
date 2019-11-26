@@ -41,14 +41,14 @@
 // limitations under the License.
 
 use crossbeam::queue::SegQueue;
-use futures::sync::oneshot;
 use futures::Future;
 use std::sync::{Arc, Mutex};
+use tokio::sync::oneshot;
 
-use manage_connection::ManageConnection;
-use queue::{Live, Queue};
-use Config;
-use Error;
+use crate::manage_connection::ManageConnection;
+use crate::queue::{Live, Queue};
+use crate::Config;
+use crate::Error;
 
 /// Inner connection pool. Handles creating and holding the connections, as well as keeping track of
 /// futures that are waiting on connections.
@@ -79,8 +79,8 @@ impl<C: ManageConnection> ConnectionPool<C> {
         self.config.max_size
     }
 
-    pub fn connect(&self) -> Box<dyn Future<Item = C::Connection, Error = Error<C::Error>> + Send> {
-        self.manager.connect()
+    pub async fn connect(&self) -> Result<C::Connection, Error<C::Error>> {
+        self.manager.connect().await
     }
 
     /// Adds a "waiter" to the queue of waiting futures. When a new connection becomes available,

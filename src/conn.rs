@@ -39,16 +39,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use futures::future::{self, Future};
+use futures::{self, Future};
+//use std::future::{self, Future};
 use std::ops::{Deref, DerefMut};
 
-use manage_connection::ManageConnection;
-use queue::Live;
-use Pool;
+use crate::manage_connection::ManageConnection;
+use crate::queue::Live;
+use crate::Pool;
 
 /// Connection future
-pub type ConnFuture<T, E> =
-    future::Either<future::FutureResult<T, E>, Box<dyn Future<Item = T, Error = E> + Send>>;
+pub type ConnFuture<T, E> = Box<dyn Future<Output = Result<T, E>> + Send>;
 
 // From c3po, https://github.com/withoutboats/c3po/blob/08a6fde00c6506bacfe6eebe621520ee54b418bb/src/lib.rs#L40
 
@@ -89,9 +89,9 @@ impl<C: ManageConnection> Drop for Conn<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tests::DummyManager;
+    use crate::tests::DummyManager;
+    use crate::Config;
     use tokio::runtime::current_thread::Runtime;
-    use Config;
     use Pool;
 
     #[test]
@@ -102,22 +102,13 @@ mod tests {
             max_size: 2,
         };
 
-        let future = Pool::new(mngr, config).and_then(|pool| {
+        Runtime::new().expect("could not run").block_on(async {
+            let pool = Pool::new(mngr, config).await.unwrap();
             assert_eq!(pool.idle_conns(), 2);
-
-            pool.connection().and_then(move |conn| {
-                assert_eq!(pool.idle_conns(), 1);
-
-                ::std::mem::drop(conn);
-
-                assert_eq!(pool.idle_conns(), 2);
-                Ok(())
-            })
+            let conn = pool.connection().await.unwrap();
+            assert_eq!(pool.idle_conns(), 1);
+            ::std::mem::drop(conn);
+            assert_eq!(pool.idle_conns(), 2);
         });
-
-        Runtime::new()
-            .expect("could not run")
-            .block_on(future)
-            .expect("could not run");
     }
 }

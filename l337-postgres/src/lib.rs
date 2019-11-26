@@ -146,7 +146,7 @@ mod tests {
                     assert_eq!(1, row.get::<_, i32>(0));
                     ()
                 }
-                //sleep(Duration::from_secs(5));
+                tokio::timer::delay_for(Duration::from_secs(2)).await;
             };
             let q2 = async {
                 let conn = pool.connection().await.unwrap();
@@ -157,12 +157,9 @@ mod tests {
                     assert_eq!(2, row.get::<_, i32>(0));
                     ()
                 }
-
-                //sleep(Duration::from_secs(5));
+                tokio::timer::delay_for(Duration::from_secs(2)).await;
             };
-            //join!(q1, q2) // This is hanging for some reason. Not sure why
-            q1.await;
-            q2.await;
+            join!(q1, q2);
         });
     }
 
@@ -188,7 +185,7 @@ mod tests {
                     assert_eq!(1, row.get::<_, i32>(0));
                     ()
                 }
-                //sleep(Duration::from_secs(5));
+                tokio::timer::delay_for(Duration::from_secs(2)).await;
             };
             let q2 = async {
                 let conn = pool.connection().await.unwrap();
@@ -199,7 +196,7 @@ mod tests {
                     assert_eq!(2, row.get::<_, i32>(0));
                     ()
                 }
-                //sleep(Duration::from_secs(5));
+                tokio::timer::delay_for(Duration::from_secs(2)).await;
             };
             let q3 = async {
                 let conn = pool.connection().await.unwrap();
@@ -210,12 +207,9 @@ mod tests {
                     assert_eq!(3, row.get::<_, i32>(0));
                     ()
                 }
-                //sleep(Duration::from_secs(5));
+                tokio::timer::delay_for(Duration::from_secs(2)).await;
             };
-            //join!(q1, q2, q3) // This is hanging for some reason. Not sure why
-            q1.await;
-            q2.await;
-            q3.await;
+            join!(q1, q2, q3) // This is hanging for some reason. Not sure why
         });
     }
 }

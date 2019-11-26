@@ -57,7 +57,7 @@ pub struct Live<T: Send> {
 impl<T: Send> Live<T> {
     pub fn new(conn: T) -> Live<T> {
         Live {
-            conn: conn,
+            conn,
             live_since: Instant::now(),
         }
     }
@@ -73,7 +73,7 @@ struct Idle<T: Send> {
 impl<T: Send> Idle<T> {
     fn new(conn: Live<T>) -> Idle<T> {
         Idle {
-            conn: conn,
+            conn,
             idle_since: Instant::now(),
         }
     }

@@ -1,23 +1,18 @@
 ///! Postgres adapater for l3-37 pool
 // #![deny(missing_docs, missing_debug_implementations)]
-extern crate futures;
-pub extern crate l337;
-extern crate tokio;
-pub extern crate tokio_postgres;
-
-#[macro_use]
-extern crate log;
+pub use l337;
+pub use tokio_postgres;
 
 //use futures::sync::oneshot;
 use async_trait::async_trait;
-use futures::{stream::Stream, FutureExt};
-use std::future::Future;
+use futures::FutureExt;
+
 use tokio::executor::spawn;
-use tokio::sync::oneshot;
+
 use tokio_postgres::error::Error;
 use tokio_postgres::{
     tls::{MakeTlsConnect, TlsConnect},
-    Client, Socket,
+    Socket,
 };
 
 use std::fmt;
@@ -55,15 +50,13 @@ where
     type Error = Error;
     async fn connect(&self) -> Result<Self::Connection, l337::Error<Self::Error>> {
         let result = self.config.connect(self.make_tls_connect.clone()).await;
-        let (client, connection) = result.map_err(|err| l337::Error::External(err))?;
+        let (client, connection) = result.map_err(l337::Error::External)?;
         spawn(connection.map(|_| {}));
         Ok(client)
     }
     async fn is_valid(&self, conn: Self::Connection) -> Result<(), l337::Error<Self::Error>> {
         // If we can execute this without erroring, we're definitely still connected to the database
-        conn.simple_query("")
-            .await
-            .map_err(|e| l337::Error::External(e))?;
+        conn.simple_query("").await.map_err(l337::Error::External)?;
         Ok(())
     }
 
@@ -91,9 +84,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::{join, Stream};
+    use futures::join;
     use l337::{Config, Pool};
-    use std::thread::sleep;
+
     use std::time::Duration;
     use tokio::runtime::current_thread::Runtime;
 

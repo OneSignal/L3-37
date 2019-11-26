@@ -168,43 +168,6 @@ impl<C: ManageConnection + Send> Pool<C> {
     /// by calling `.timeout` on the returned future.
     pub async fn connection(&self) -> Result<Conn<C>, Error<C::Error>> {
         let conns = self.conn_pool.conns.lock().await;
-        /*
-        debug!("connection: acquired connection lock");
-        if let Some(conn) = conns.get() {
-            debug!("connection: connection already in pool and ready to go");
-            Ok(Conn {
-                conn: Some(conn),
-                pool: self.clone()
-            })
-        } else {
-            debug!("connection: try spawn connection");
-            if let Some(conn_future) = Self::try_spawn_connection(&self, &conns) {
-                let this = self.clone();
-                debug!("connection: try spawn connection");
-                /*return future::Either::B(Box::new(conn_future.map(|conn| Conn {
-                    conn: Some(conn),
-                    pool: this,
-                })));*/
-            }
-            // Have the pool notify us of the connection
-            let (tx, rx) = oneshot::channel();
-            debug!("connection: pushing to notify of connection");
-            self.conn_pool.notify_of_connection(tx);
-
-            // Prepare the future which will wait for a free connection
-            let this = self.clone();
-            debug!("connection: waiting for connection");
-            future::Either::B(Box::new(
-                rx.map(|conn| {
-                    debug!("connection: got connection after waiting");
-                    Conn {
-                        conn: Some(conn),
-                        pool: this,
-                    }
-                })
-                .map_err(|_err| unimplemented!()),
-            ))
-        }*/
         let conn = match conns.get() {
             Some(conn) => {
                 debug!("connection: connection already in pool and ready to go");
@@ -220,7 +183,10 @@ impl<C: ManageConnection + Send> Pool<C> {
                         self.conn_pool.notify_of_connection(tx);
                         match rx.await {
                             Ok(conn) => Ok(conn),
-                            Err(_) => unimplemented!(),
+                            Err(e) => Err(Error::Internal(error::InternalError::Other(format!(
+                                "rx error {}",
+                                e
+                            )))),
                         }
                     }
                 }
@@ -238,7 +204,7 @@ impl<C: ManageConnection + Send> Pool<C> {
         this: &Self,
         conns: &Arc<queue::Queue<<C as ManageConnection>::Connection>>,
     ) -> Option<Result<Live<C::Connection>, Error<C::Error>>> {
-        if let Some(_) = conns.safe_increment(this.conn_pool.max_size()) {
+        if conns.safe_increment(this.conn_pool.max_size()).is_some() {
             let result = this.conn_pool.connect().await;
             Some(match result {
                 Ok(conn) => Ok(Live::new(conn)),
@@ -353,7 +319,7 @@ mod tests {
             Ok(())
         }
 
-        async fn is_valid(&self, _conn: Self::Connection) -> Result<(), Error<Self::Error>> {
+        async fn is_valid(&self, (): Self::Connection) -> Result<(), Error<Self::Error>> {
             unimplemented!()
         }
 
@@ -379,7 +345,6 @@ mod tests {
                 live_since: _,
             }) = conn.conn
             {
-                ()
             } else {
                 panic!("connection is not correct type")
             }
@@ -400,7 +365,7 @@ mod tests {
             let result = pool.connection().timeout(Duration::from_millis(10)).await;
             match result {
                 Ok(_) => panic!("didn't timeout"),
-                Err(err) => (),
+                Err(_err) => (),
             }
         });
     }
@@ -423,7 +388,6 @@ mod tests {
                 .map(|res| match res {
                     Ok(conn) => {
                         ::std::mem::forget(conn);
-                        ()
                     }
                     Err(_) => panic!("second connection timed out"),
                 });
@@ -433,7 +397,6 @@ mod tests {
                 .map(|res| match res {
                     Ok(conn) => {
                         ::std::mem::forget(conn);
-                        ()
                     }
                     Err(_) => panic!("second connection timed out"),
                 });

@@ -22,11 +22,6 @@ use tokio_postgres::{
 
 use std::fmt;
 
-pub struct AsyncConnection {
-    pub client: Client,
-    broken: bool,
-}
-
 /// A `ManageConnection` for `tokio_postgres::Connection`s.
 pub struct PostgresConnectionManager<T>
 where
@@ -56,7 +51,7 @@ where
     T::TlsConnect: Send,
     <T::TlsConnect as TlsConnect<Socket>>::Future: Send + Sync,
 {
-    type Connection = AsyncConnection;
+    type Connection = tokio_postgres::Client;
     type Error = Error;
     async fn connect(&self) -> Result<Self::Connection, l337::Error<Self::Error>> {
         println!("Spawning postgres connection");
@@ -65,22 +60,18 @@ where
         let (client, connection) = result.map_err(|err| l337::Error::External(err))?;
         spawn(connection.map(|_| {}));
         println!("Returning connection");
-        Ok(AsyncConnection {
-            broken: false,
-            client,
-        })
+        Ok(client)
     }
     async fn is_valid(&self, conn: Self::Connection) -> Result<(), l337::Error<Self::Error>> {
         // If we can execute this without erroring, we're definitely still connected to the database
-        conn.client
-            .simple_query("")
+        conn.simple_query("")
             .await
             .map_err(|e| l337::Error::External(e))?;
         Ok(())
     }
 
     fn has_broken(&self, conn: &mut Self::Connection) -> bool {
-        conn.client.is_closed()
+        conn.is_closed()
     }
 
     fn timed_out(&self) -> l337::Error<Self::Error> {
@@ -124,8 +115,8 @@ mod tests {
             let pool: Pool<PostgresConnectionManager<tokio_postgres::NoTls>> =
                 Pool::new(mngr, config).await.unwrap();
             let conn = pool.connection().await.unwrap();
-            let select = conn.client.prepare("SELECT 1::INT4").await.unwrap();
-            let rows = conn.client.query(&select, &[]).await.unwrap();
+            let select = conn.prepare("SELECT 1::INT4").await.unwrap();
+            let rows = conn.query(&select, &[]).await.unwrap();
             for row in rows {
                 assert_eq!(1, row.get::<_, i32>(0));
                 ()
@@ -149,8 +140,8 @@ mod tests {
                 Pool::new(mngr, config).await.unwrap();
             let q1 = async {
                 let conn = pool.connection().await.unwrap();
-                let select = conn.client.prepare("SELECT 1::INT4").await.unwrap();
-                let rows = conn.client.query(&select, &[]).await.unwrap();
+                let select = conn.prepare("SELECT 1::INT4").await.unwrap();
+                let rows = conn.query(&select, &[]).await.unwrap();
                 for row in rows {
                     assert_eq!(1, row.get::<_, i32>(0));
                     ()
@@ -160,8 +151,8 @@ mod tests {
             let q2 = async {
                 let conn = pool.connection().await.unwrap();
                 println!("Q2 got connection");
-                let select = conn.client.prepare("SELECT 2::INT4").await.unwrap();
-                let rows = conn.client.query(&select, &[]).await.unwrap();
+                let select = conn.prepare("SELECT 2::INT4").await.unwrap();
+                let rows = conn.query(&select, &[]).await.unwrap();
                 for row in rows {
                     assert_eq!(2, row.get::<_, i32>(0));
                     ()
@@ -191,8 +182,8 @@ mod tests {
                 Pool::new(mngr, config).await.unwrap();
             let q1 = async {
                 let conn = pool.connection().await.unwrap();
-                let select = conn.client.prepare("SELECT 1::INT4").await.unwrap();
-                let rows = conn.client.query(&select, &[]).await.unwrap();
+                let select = conn.prepare("SELECT 1::INT4").await.unwrap();
+                let rows = conn.query(&select, &[]).await.unwrap();
                 for row in rows {
                     assert_eq!(1, row.get::<_, i32>(0));
                     ()
@@ -202,8 +193,8 @@ mod tests {
             let q2 = async {
                 let conn = pool.connection().await.unwrap();
                 println!("Q2 got connection");
-                let select = conn.client.prepare("SELECT 2::INT4").await.unwrap();
-                let rows = conn.client.query(&select, &[]).await.unwrap();
+                let select = conn.prepare("SELECT 2::INT4").await.unwrap();
+                let rows = conn.query(&select, &[]).await.unwrap();
                 for row in rows {
                     assert_eq!(2, row.get::<_, i32>(0));
                     ()
@@ -213,8 +204,8 @@ mod tests {
             let q3 = async {
                 let conn = pool.connection().await.unwrap();
                 println!("Q2 got connection");
-                let select = conn.client.prepare("SELECT 3::INT4").await.unwrap();
-                let rows = conn.client.query(&select, &[]).await.unwrap();
+                let select = conn.prepare("SELECT 3::INT4").await.unwrap();
+                let rows = conn.query(&select, &[]).await.unwrap();
                 for row in rows {
                     assert_eq!(3, row.get::<_, i32>(0));
                     ()

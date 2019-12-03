@@ -5,6 +5,8 @@ extern crate futures;
 pub extern crate l337;
 extern crate redis;
 extern crate tokio;
+#[macro_use]
+extern crate async_trait;
 
 use futures::Future;
 use redis::aio::{ConnectionLike, SharedConnection};
@@ -63,31 +65,26 @@ impl ConnectionLike for AsyncConnection {
     }
 }
 
+#[async_trait]
 impl l337::ManageConnection for RedisConnectionManager {
     type Connection = SharedConnection;
     type Error = RedisError;
 
-    fn connect(
-        &self,
-    ) -> Box<Future<Item = Self::Connection, Error = l337::Error<Self::Error>> + 'static + Send>
-    {
-        Box::new(
-            self.client
-                .get_shared_async_connection()
-                .map_err(l337::Error::External),
-        )
+    async fn connect(&self) -> Result<Self::Connection, l337::Error<Self::Error>> {
+        self.client
+            .get_shared_async_connection()
+            .await
+            .map_err(l337::Error::External)
     }
 
-    fn is_valid(
-        &self,
-        conn: Self::Connection,
-    ) -> Box<Future<Item = (), Error = l337::Error<Self::Error>>> {
-        Box::new(
-            redis::cmd("PING")
-                .query_async::<_, ()>(conn)
-                .map(|_| ())
-                .map_err(|e| l337::Error::External(e)),
-        )
+    async fn is_valid(&self, conn: Self::Connection) -> Result<(), l337::Error<Self::Error>> {
+        redis::cmd("PING")
+            .query_async::<_, ()>(conn)
+            .compat()
+            .await
+            .map_err(|e| l337::Error::External(e))?;
+
+        Ok(())
     }
 
     fn has_broken(&self, _conn: &mut Self::Connection) -> bool {

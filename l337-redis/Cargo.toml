@@ -2,9 +2,11 @@
 name = "l337-redis"
 version = "0.1.0"
 authors = ["Jonathon Sheffield <samsmug@gmail.com>"]
+edition = "2018"
 
 [dependencies]
 l337 = { path = ".." }
-futures = "0.1.14"
-tokio = "0.1.8"
+futures = "0.3"
+tokio = "0.2"
 redis = "0.13"
+async-trait = "0.1.18"

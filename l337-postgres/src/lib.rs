@@ -218,7 +218,6 @@ mod tests {
             tokio_postgres::NoTls,
         );
 
-
         let config: Config = Default::default();
         let pool = Pool::new(mngr, config).await.unwrap();
         let q1 = async {

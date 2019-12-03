@@ -103,7 +103,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_works() {
-        let mngr = RedisConnectionManager::new("redis://localhost:6379/0").unwrap();
+        let mngr = RedisConnectionManager::new("redis://redis:6379/0").unwrap();
 
         let config: Config = Default::default();
 

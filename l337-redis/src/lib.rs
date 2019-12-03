@@ -7,10 +7,11 @@ extern crate redis;
 extern crate tokio;
 #[macro_use]
 extern crate async_trait;
+#[macro_use]
+extern crate log;
 
-use futures::Future;
-use redis::aio::{ConnectionLike, SharedConnection};
-use redis::{Client, IntoConnectionInfo, RedisError};
+use redis::aio::{ConnectionLike, MultiplexedConnection};
+use redis::{Client, Cmd, IntoConnectionInfo, Pipeline, RedisError, RedisFuture, Value};
 
 type Result<T> = std::result::Result<T, RedisError>;
 
@@ -36,28 +37,17 @@ impl RedisConnectionManager {
 pub struct AsyncConnection(pub l337::Conn<RedisConnectionManager>);
 
 impl ConnectionLike for AsyncConnection {
-    fn req_packed_command(
-        self,
-        cmd: Vec<u8>,
-    ) -> Box<Future<Item = (Self, redis::Value), Error = RedisError> + Send> {
-        let conn = self.0.clone();
-        Box::new(
-            conn.req_packed_command(cmd)
-                .map(move |(_conn, value)| (self, value)),
-        )
+    fn req_packed_command<'a>(&'a mut self, cmd: &'a Cmd) -> RedisFuture<'a, Value> {
+        self.0.req_packed_command(cmd)
     }
 
-    fn req_packed_commands(
-        self,
-        cmd: Vec<u8>,
+    fn req_packed_commands<'a>(
+        &'a mut self,
+        cmd: &'a Pipeline,
         offset: usize,
         count: usize,
-    ) -> Box<Future<Item = (Self, Vec<redis::Value>), Error = RedisError> + Send> {
-        let conn = self.0.clone();
-        Box::new(
-            conn.req_packed_commands(cmd, offset, count)
-                .map(move |(_conn, value)| (self, value)),
-        )
+    ) -> RedisFuture<'a, Vec<Value>> {
+        self.0.req_packed_commands(cmd, offset, count)
     }
 
     fn get_db(&self) -> i64 {
@@ -67,22 +57,32 @@ impl ConnectionLike for AsyncConnection {
 
 #[async_trait]
 impl l337::ManageConnection for RedisConnectionManager {
-    type Connection = SharedConnection;
+    type Connection = MultiplexedConnection;
     type Error = RedisError;
 
-    async fn connect(&self) -> Result<Self::Connection, l337::Error<Self::Error>> {
-        self.client
-            .get_shared_async_connection()
+    async fn connect(&self) -> std::result::Result<Self::Connection, l337::Error<Self::Error>> {
+        let (connection, future) = self
+            .client
+            .get_multiplexed_async_connection()
             .await
-            .map_err(l337::Error::External)
+            .map_err(l337::Error::External)?;
+
+        tokio::spawn(async move {
+            future.await;
+            error!("Connection backing future ended unexpectedly");
+        });
+
+        Ok(connection)
     }
 
-    async fn is_valid(&self, conn: Self::Connection) -> Result<(), l337::Error<Self::Error>> {
+    async fn is_valid(
+        &self,
+        mut conn: Self::Connection,
+    ) -> std::result::Result<(), l337::Error<Self::Error>> {
         redis::cmd("PING")
-            .query_async::<_, ()>(conn)
-            .compat()
+            .query_async::<_, ()>(&mut conn)
             .await
-            .map_err(|e| l337::Error::External(e))?;
+            .map_err(l337::Error::External)?;
 
         Ok(())
     }
@@ -100,24 +100,20 @@ impl l337::ManageConnection for RedisConnectionManager {
 mod tests {
     use super::*;
     use l337::{Config, Pool};
-    use tokio::runtime::Runtime;
 
-    #[test]
-    fn it_works() {
-        let mngr = RedisConnectionManager::new("redis://redis:6379/0").unwrap();
+    #[tokio::test]
+    async fn it_works() {
+        let mngr = RedisConnectionManager::new("redis://localhost:6379/0").unwrap();
 
-        let mut runtime = Runtime::new().expect("could not run");
         let config: Config = Default::default();
 
-        let future = Pool::new(mngr, config).and_then(|pool| {
-            pool.connection().and_then(|conn| {
-                redis::cmd("PING")
-                    .query_async::<_, ()>(AsyncConnection(conn))
-                    .map(|_| println!("done ping"))
-                    .map_err(|e| l337::Error::External(e))
-            })
-        });
+        let pool = Pool::new(mngr, config).await.unwrap();
+        let conn = pool.connection().await.unwrap();
+        redis::cmd("PING")
+            .query_async::<_, ()>(&mut AsyncConnection(conn))
+            .await
+            .unwrap();
 
-        runtime.block_on(future).expect("could not run");
+        println!("done ping")
     }
 }

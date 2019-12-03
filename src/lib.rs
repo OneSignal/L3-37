@@ -214,9 +214,7 @@ impl<C: ManageConnection + Send> Pool<C> {
         if let Some(_) = conns.safe_increment(this.conn_pool.max_size()) {
             let conns = Arc::clone(&conns);
             let result = match this.conn_pool.connect().await {
-                Ok(conn) => {
-                    Ok(Live::new(conn))
-                }
+                Ok(conn) => Ok(Live::new(conn)),
                 Err(err) => {
                     // if we weren't able to make a new connection, we need to decrement
                     // connections, since we preincremented the connection count for this  one

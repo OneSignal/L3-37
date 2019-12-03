@@ -59,7 +59,11 @@ pub type ConnFuture<T, E> = future::Either<
 ///
 /// This can be dereferences to the `Service` instance this pool manages, and
 /// also implements `Service` itself by delegating.
-pub struct Conn<C> where C: ManageConnection, C::Connection: Send {
+pub struct Conn<C>
+where
+    C: ManageConnection,
+    C::Connection: Send,
+{
     /// Actual connection. This should never become a None variant under normal operation.
     /// This is an option so we can take the connection on drop, and push it back into the pool
     pub conn: Option<Live<C::Connection>>,
@@ -71,25 +75,39 @@ pub struct Conn<C> where C: ManageConnection, C::Connection: Send {
     pub pool: Option<Pool<C>>,
 }
 
-impl<C> Deref for Conn<C> where C: ManageConnection, C::Connection: Send{
+impl<C> Deref for Conn<C>
+where
+    C: ManageConnection,
+    C::Connection: Send,
+{
     type Target = C::Connection;
     fn deref(&self) -> &Self::Target {
         &self.conn.as_ref().unwrap().conn
     }
 }
 
-impl<C> DerefMut for Conn<C> where C: ManageConnection, C::Connection: Send{
+impl<C> DerefMut for Conn<C>
+where
+    C: ManageConnection,
+    C::Connection: Send,
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.conn.as_mut().unwrap().conn
     }
 }
 
-impl<C> Drop for Conn<C> where C: ManageConnection, C::Connection: Send{
+impl<C> Drop for Conn<C>
+where
+    C: ManageConnection,
+    C::Connection: Send,
+{
     fn drop(&mut self) {
         let conn = self.conn.take().unwrap();
         let pool = self.pool.take().unwrap();
 
-        tokio::spawn(async move {pool.put_back(conn).await;});
+        tokio::spawn(async move {
+            pool.put_back(conn).await;
+        });
     }
 }
 

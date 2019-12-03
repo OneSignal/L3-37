@@ -46,12 +46,6 @@ use crate::manage_connection::ManageConnection;
 use crate::queue::Live;
 use crate::Pool;
 
-/// Connection future
-pub type ConnFuture<T, E> = future::Either<
-    Result<T, E>,
-    std::pin::Pin<Box<dyn Future<Output = Result<T, E>> + Send + Unpin>>,
->;
-
 // From c3po, https://github.com/withoutboats/c3po/blob/08a6fde00c6506bacfe6eebe621520ee54b418bb/src/lib.rs#L40
 
 /// A smart wrapper around a connection which stores it back in the pool

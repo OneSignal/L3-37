@@ -69,7 +69,7 @@ use tokio::time;
 
 use crate::error::InternalError;
 
-pub use conn::{Conn, ConnFuture};
+pub use conn::Conn;
 pub use manage_connection::ManageConnection;
 
 use inner::ConnectionPool;

@@ -98,9 +98,9 @@ where
             return true;
         }
 
-        // Use try_recv() as `has_broken` can be called via Drop
-        // and not have a future Context to poll on.
-        // https://docs.rs/futures/0.1.28/futures/sync/oneshot/struct.Receiver.html#method.try_recv
+        // Use try_recv() as `has_broken` can be called via Drop and not have a
+        // future Context to poll on.
+        // https://docs.rs/futures/0.3.1/futures/channel/oneshot/struct.Receiver.html#method.try_recv
         match conn.receiver.try_recv() {
             // If we get any message, the connection task stopped, which means this connection is
             // now dead

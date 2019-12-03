@@ -211,7 +211,7 @@ impl<C: ManageConnection + Send> Pool<C> {
         this: &Self,
         conns: &Arc<queue::Queue<<C as ManageConnection>::Connection>>,
     ) -> Option<Result<Live<C::Connection>, Error<C::Error>>> {
-        if let Some(_) = conns.safe_increment(this.conn_pool.max_size()) {
+        if conns.safe_increment(this.conn_pool.max_size()).is_some() {
             let conns = Arc::clone(&conns);
             let result = match this.conn_pool.connect().await {
                 Ok(conn) => Ok(Live::new(conn)),

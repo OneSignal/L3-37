@@ -39,7 +39,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use futures::future::{self, Future};
 use std::ops::{Deref, DerefMut};
 
 use crate::manage_connection::ManageConnection;

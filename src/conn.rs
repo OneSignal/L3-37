@@ -89,7 +89,7 @@ impl<C> Drop for Conn<C> where C: ManageConnection, C::Connection: Send{
         let conn = self.conn.take().unwrap();
         let pool = self.pool.take().unwrap();
 
-            tokio::spawn(async move {pool.put_back(conn).await;});
+        tokio::spawn(async move {pool.put_back(conn).await;});
     }
 }
 
@@ -98,10 +98,12 @@ mod tests {
     use super::*;
     use crate::tests::DummyManager;
     use crate::Config;
+    use std::time::Duration;
+    use tokio::time::delay_for;
 
     #[tokio::test]
     async fn conn_pushes_back_into_pool_after_drop() {
-        let mngr = DummyManager {};
+        let mngr = DummyManager::new();
         let config = Config {
             min_size: 2,
             max_size: 2,
@@ -114,6 +116,10 @@ mod tests {
         assert_eq!(pool.idle_conns().await, 1);
 
         ::std::mem::drop(conn);
+
+        // The connection is added back to the pool asynchronously, so we need
+        // to wait for the future to finish.
+        delay_for(Duration::from_secs(1)).await;
 
         assert_eq!(pool.idle_conns().await, 2);
     }

@@ -325,6 +325,12 @@ mod tests {
     #[derive(Debug)]
     pub struct DummyManager {}
 
+    impl DummyManager {
+        pub fn new() -> Self {
+            Self {}
+        }
+    }
+
     #[async_trait]
     impl ManageConnection for DummyManager {
         type Connection = ();
@@ -350,7 +356,7 @@ mod tests {
 
     #[tokio::test]
     async fn simple_pool_creation_and_connection() {
-        let mngr = DummyManager {};
+        let mngr = DummyManager::new();
         let config: Config = Default::default();
 
         let pool = Pool::new(mngr, config).await.unwrap();
@@ -361,7 +367,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_returns_a_non_resolved_future_when_over_pool_limit() {
-        let mngr = DummyManager {};
+        let mngr = DummyManager::new();
         let config: Config = Config {
             max_size: 1,
             min_size: 1,
@@ -370,7 +376,7 @@ mod tests {
         // pool is of size , we try to get 2 connections so the second one will never resolve
         let pool = Pool::new(mngr, config).await.unwrap();
         // Forget the values so we don't drop them, and return them back to the pool
-        ::std::mem::forget(pool.connection());
+        ::std::mem::forget(pool.connection().await.unwrap());
 
         let result = tokio::time::timeout(Duration::from_millis(10), pool.connection()).await;
 
@@ -379,7 +385,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_allocates_new_connections_up_to_max_size() {
-        let mngr = DummyManager {};
+        let mngr = DummyManager::new();
         let config: Config = Config {
             max_size: 2,
             min_size: 1,
@@ -389,8 +395,10 @@ mod tests {
         // When we try 2 connections, they should both pass without timing out
         let pool = Pool::new(mngr, config).await.unwrap();
 
+        let connection = pool.connection().await.unwrap();
+
         // Forget the values so we don't drop them, and return them back to the pool
-        ::std::mem::forget(pool.connection());
+        ::std::mem::forget(connection);
 
         let f1 = async {
             let conn = tokio::time::timeout(Duration::from_millis(10), pool.connection())

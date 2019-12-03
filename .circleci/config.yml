@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker: # use the docker executor type; machine and macos executors are also supported
-      - image: circleci/rust:1.34
+      - image: circleci/rust:1.39
       - image: redis:4.0.1
         name: redis
       - image: "sfackler/rust-postgres-test:4"
@@ -12,12 +12,12 @@ jobs:
       - checkout # check out the code in the project directory
       - restore_cache:
           keys:
-            - target-v1-{{ .Branch }}-{{ checksum "Cargo.toml" }}
-            - target-v1-master-
-            - target-v1-
+            - target-v2-{{ .Branch }}-{{ checksum "Cargo.toml" }}
+            - target-v2-master-
+            - target-v2-
       - run: cargo build --release --all
       - run: cargo test --all
       - save_cache:
-          key: target-v1-{{ .Branch }}-{{ checksum "Cargo.toml" }}
+          key: target-v2-{{ .Branch }}-{{ checksum "Cargo.toml" }}
           paths:
             - target/

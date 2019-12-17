@@ -10,6 +10,7 @@ extern crate async_trait;
 #[macro_use]
 extern crate log;
 
+use futures::channel::oneshot;
 use redis::aio::{ConnectionLike, MultiplexedConnection};
 use redis::{Client, Cmd, IntoConnectionInfo, Pipeline, RedisError, RedisFuture, Value};
 
@@ -30,15 +31,15 @@ impl RedisConnectionManager {
     }
 }
 
-/// Unfortunately a required struct to make the redis-rs api work.
-/// As a todo, we might want to consider improving the redis-rs api or switching to a different lib
-/// Looking at the tests will make why this struct is needed clear, but basically it requires
-/// an owned version of conn so we can't use deref to make everything work nice.
-pub struct AsyncConnection(pub l337::Conn<RedisConnectionManager>);
+pub struct AsyncConnection {
+    conn: MultiplexedConnection,
+    receiver: oneshot::Receiver<()>,
+    broken: bool,
+}
 
 impl ConnectionLike for AsyncConnection {
     fn req_packed_command<'a>(&'a mut self, cmd: &'a Cmd) -> RedisFuture<'a, Value> {
-        self.0.req_packed_command(cmd)
+        self.conn.req_packed_command(cmd)
     }
 
     fn req_packed_commands<'a>(
@@ -47,17 +48,17 @@ impl ConnectionLike for AsyncConnection {
         offset: usize,
         count: usize,
     ) -> RedisFuture<'a, Vec<Value>> {
-        self.0.req_packed_commands(cmd, offset, count)
+        self.conn.req_packed_commands(cmd, offset, count)
     }
 
     fn get_db(&self) -> i64 {
-        self.0.get_db()
+        self.conn.get_db()
     }
 }
 
 #[async_trait]
 impl l337::ManageConnection for RedisConnectionManager {
-    type Connection = MultiplexedConnection;
+    type Connection = AsyncConnection;
     type Error = RedisError;
 
     async fn connect(&self) -> std::result::Result<Self::Connection, l337::Error<Self::Error>> {
@@ -67,28 +68,65 @@ impl l337::ManageConnection for RedisConnectionManager {
             .await
             .map_err(l337::Error::External)?;
 
+        let (tx, rx) = oneshot::channel();
+
         tokio::spawn(async move {
             future.await;
-            error!("Connection backing future ended unexpectedly");
+            debug!("Future backing redis connection ended, future calls to this redis connection will fail");
+
+            if let Err(e) = tx.send(()) {
+                error!(
+                    "Failed to alert redis client that connection has ended: {:?}",
+                    e
+                );
+            }
         });
 
-        Ok(connection)
+        Ok(AsyncConnection {
+            conn: connection,
+            broken: false,
+            receiver: rx,
+        })
     }
 
     async fn is_valid(
         &self,
-        mut conn: Self::Connection,
+        conn: &mut Self::Connection,
     ) -> std::result::Result<(), l337::Error<Self::Error>> {
         redis::cmd("PING")
-            .query_async::<_, ()>(&mut conn)
+            .query_async::<_, ()>(conn)
             .await
             .map_err(l337::Error::External)?;
 
         Ok(())
     }
 
-    fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
-        false
+    fn has_broken(&self, conn: &mut Self::Connection) -> bool {
+        if conn.broken {
+            return true;
+        }
+
+        // Use try_recv() as `has_broken` can be called via Drop and not have a
+        // future Context to poll on.
+        // https://docs.rs/futures/0.3.1/futures/channel/oneshot/struct.Receiver.html#method.try_recv
+        match conn.receiver.try_recv() {
+            // If we get any message, the connection task stopped, which means this connection is
+            // now dead
+            Ok(Some(())) => {
+                conn.broken = true;
+                true
+            }
+            // If the future isn't ready, then we haven't sent a value which means the future is
+            // still successfully running
+            Ok(None) => false,
+            // This can happen if the future that the connection was
+            // spawned in panicked or was dropped.
+            Err(err) => {
+                warn!("cannot receive from connection future - err: {}", err);
+                conn.broken = true;
+                true
+            }
+        }
     }
 
     fn timed_out(&self) -> l337::Error<Self::Error> {
@@ -108,11 +146,8 @@ mod tests {
         let config: Config = Default::default();
 
         let pool = Pool::new(mngr, config).await.unwrap();
-        let conn = pool.connection().await.unwrap();
-        redis::cmd("PING")
-            .query_async::<_, ()>(&mut AsyncConnection(conn))
-            .await
-            .unwrap();
+        let conn: &mut AsyncConnection = &mut pool.connection().await.unwrap();
+        redis::cmd("PING").query_async::<_, ()>(conn).await.unwrap();
 
         println!("done ping")
     }

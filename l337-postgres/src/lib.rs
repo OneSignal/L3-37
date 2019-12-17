@@ -83,7 +83,7 @@ where
         })
     }
 
-    async fn is_valid(&self, conn: Self::Connection) -> Result<(), l337::Error<Self::Error>> {
+    async fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), l337::Error<Self::Error>> {
         // If we can execute this without erroring, we're definitely still connected to the database
         conn.client
             .simple_query("")

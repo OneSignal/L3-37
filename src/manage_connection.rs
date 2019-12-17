@@ -43,7 +43,7 @@ pub trait ManageConnection: Send + Sync + 'static {
     ///
     /// Note that boxing is used here since impl Trait is not yet supported
     /// within trait definitions.
-    async fn is_valid(&self, conn: Self::Connection) -> Result<(), L337Error<Self::Error>>;
+    async fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), L337Error<Self::Error>>;
 
     /// Quick check to determine if the connection has broken
     fn has_broken(&self, conn: &mut Self::Connection) -> bool;

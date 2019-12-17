@@ -338,7 +338,7 @@ mod tests {
             Ok(())
         }
 
-        async fn is_valid(&self, _conn: Self::Connection) -> Result<(), Error<Self::Error>> {
+        async fn is_valid(&self, _conn: &mut Self::Connection) -> Result<(), Error<Self::Error>> {
             unimplemented!()
         }
 

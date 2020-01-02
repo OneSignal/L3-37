@@ -146,8 +146,11 @@ mod tests {
         let config: Config = Default::default();
 
         let pool = Pool::new(mngr, config).await.unwrap();
-        let conn: &mut AsyncConnection = &mut pool.connection().await.unwrap();
-        redis::cmd("PING").query_async::<_, ()>(conn).await.unwrap();
+        let mut conn = pool.connection().await.unwrap();
+        redis::cmd("PING")
+            .query_async::<_, ()>(&mut *conn)
+            .await
+            .unwrap();
 
         println!("done ping")
     }

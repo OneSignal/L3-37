@@ -228,11 +228,14 @@ mod tests {
             for row in rows {
                 assert_eq!(1, row.get(0));
             }
-
-            delay_for(Duration::from_secs(5)).await;
-
-            conn
         };
+
+        q1.await;
+
+        // This delay is required to ensure that the connection is returned to
+        // the pool after Drop runs. Because Drop spawns a future that returns
+        // the connection to the pool.
+        delay_for(Duration::from_millis(500)).await;
 
         let q2 = async {
             let conn = pool.connection().await.unwrap();
@@ -242,10 +245,6 @@ mod tests {
             for row in rows {
                 assert_eq!(2, row.get(0));
             }
-
-            delay_for(Duration::from_secs(5)).await;
-
-            conn
         };
 
         let q3 = async {
@@ -256,12 +255,10 @@ mod tests {
             for row in rows {
                 assert_eq!(3, row.get(0));
             }
-
-            delay_for(Duration::from_secs(5)).await;
-
-            conn
         };
 
-        futures::join!(q1, q2, q3);
+        futures::join!(q2, q3);
+
+        assert_eq!(pool.total_conns().await, 2);
     }
 }

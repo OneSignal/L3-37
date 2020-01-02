@@ -11,3 +11,6 @@ tokio = "0.2"
 tokio-postgres = "0.5.1"
 log = "0.4.8"
 async-trait = "0.1.22"
+
+[dev-dependencies]
+tokio = { version = "0.2", features = ["macros"] }

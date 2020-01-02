@@ -8,8 +8,7 @@ edition = "2018"
 l337 = { path = ".." }
 futures = "0.3"
 tokio = "0.2"
-# This should be changed to the next version of redis-rs when
-# https://github.com/mitsuhiko/redis-rs/pull/232 is merged.
-redis = { git = "https://github.com/Marwes/redis-rs.git", branch = "async_await_api" }
-async-trait = "0.1.18"
+# This should be changed to the next version of redis-rs when a release is done.
+redis = { git = "https://github.com/mitsuhiko/redis-rs.git", branch = "master" }
+async-trait = "0.1.22"
 log = "0.4"

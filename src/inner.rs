@@ -40,7 +40,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crossbeam::queue::SegQueue;
+use crossbeam_queue::SegQueue;
 use futures::channel::oneshot;
 use futures::lock::Mutex;
 use std::sync::Arc;
@@ -92,7 +92,7 @@ impl<C: ManageConnection> ConnectionPool<C> {
     pub fn try_waiting(
         &self,
     ) -> Option<oneshot::Sender<Live<<C as ManageConnection>::Connection>>> {
-        self.waiting.try_pop()
+        self.waiting.pop().ok()
     }
 
     pub fn has_broken(&self, conn: &mut Live<C::Connection>) -> bool {

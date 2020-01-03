@@ -43,7 +43,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
-use crossbeam::queue::SegQueue;
+use crossbeam_queue::SegQueue;
 
 // Almost all of this file is directly from c3po: https://github.com/withoutboats/c3po/blob/08a6fde00c6506bacfe6eebe621520ee54b418bb/src/queue.rs
 
@@ -126,7 +126,7 @@ impl<C: Send> Queue<C> {
 
     /// Get the longest-idle connection from the queue.
     pub fn get(&self) -> Option<Live<C>> {
-        self.idle.try_pop().map(|Idle { conn, .. }| {
+        self.idle.pop().ok().map(|Idle { conn, .. }| {
             self.idle_count.fetch_sub(1, Ordering::SeqCst);
             conn
         })

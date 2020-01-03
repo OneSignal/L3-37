@@ -43,7 +43,7 @@
 //!
 //! Any connection type that implements the `ManageConnection` trait can be used with this libary.
 
-extern crate crossbeam;
+extern crate crossbeam_queue;
 extern crate futures;
 extern crate tokio;
 #[macro_use]

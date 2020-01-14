@@ -39,16 +39,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use futures::future::{self, Future};
 use std::ops::{Deref, DerefMut};
 
-use manage_connection::ManageConnection;
-use queue::Live;
-use Pool;
-
-/// Connection future
-pub type ConnFuture<T, E> =
-    future::Either<future::FutureResult<T, E>, Box<dyn Future<Item = T, Error = E> + Send>>;
+use crate::manage_connection::ManageConnection;
+use crate::queue::Live;
+use crate::Pool;
 
 // From c3po, https://github.com/withoutboats/c3po/blob/08a6fde00c6506bacfe6eebe621520ee54b418bb/src/lib.rs#L40
 
@@ -57,67 +52,86 @@ pub type ConnFuture<T, E> =
 ///
 /// This can be dereferences to the `Service` instance this pool manages, and
 /// also implements `Service` itself by delegating.
-pub struct Conn<C: ManageConnection> {
+pub struct Conn<C>
+where
+    C: ManageConnection,
+    C::Connection: Send,
+{
     /// Actual connection. This should never become a None variant under normal operation.
     /// This is an option so we can take the connection on drop, and push it back into the pool
     pub conn: Option<Live<C::Connection>>,
-    /// Underlying pool. A reference is stored here so we can push the connection back into the
-    /// pool on drop
-    pub pool: Pool<C>,
+
+    /// Underlying pool. A reference is stored here so we can push the connection
+    /// back into the pool on drop. This should never become a None variant under
+    /// normal operation. This is an option so we can take the connection on
+    /// drop, and push it back into the pool
+    pub pool: Option<Pool<C>>,
 }
 
-impl<C: ManageConnection> Deref for Conn<C> {
+impl<C> Deref for Conn<C>
+where
+    C: ManageConnection,
+    C::Connection: Send,
+{
     type Target = C::Connection;
     fn deref(&self) -> &Self::Target {
         &self.conn.as_ref().unwrap().conn
     }
 }
 
-impl<C: ManageConnection> DerefMut for Conn<C> {
+impl<C> DerefMut for Conn<C>
+where
+    C: ManageConnection,
+    C::Connection: Send,
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.conn.as_mut().unwrap().conn
     }
 }
 
-impl<C: ManageConnection> Drop for Conn<C> {
+impl<C> Drop for Conn<C>
+where
+    C: ManageConnection,
+    C::Connection: Send,
+{
     fn drop(&mut self) {
         let conn = self.conn.take().unwrap();
-        self.pool.put_back(conn);
+        let pool = self.pool.take().unwrap();
+
+        tokio::spawn(async move {
+            pool.put_back(conn).await;
+        });
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tests::DummyManager;
-    use tokio::runtime::current_thread::Runtime;
-    use Config;
-    use Pool;
+    use crate::tests::DummyManager;
+    use crate::Config;
+    use std::time::Duration;
+    use tokio::time::delay_for;
 
-    #[test]
-    fn conn_pushes_back_into_pool_after_drop() {
-        let mngr = DummyManager {};
+    #[tokio::test]
+    async fn conn_pushes_back_into_pool_after_drop() {
+        let mngr = DummyManager::new();
         let config = Config {
             min_size: 2,
             max_size: 2,
         };
 
-        let future = Pool::new(mngr, config).and_then(|pool| {
-            assert_eq!(pool.idle_conns(), 2);
+        let pool = Pool::new(mngr, config).await.unwrap();
+        assert_eq!(pool.idle_conns().await, 2);
 
-            pool.connection().and_then(move |conn| {
-                assert_eq!(pool.idle_conns(), 1);
+        let conn = pool.connection().await.unwrap();
+        assert_eq!(pool.idle_conns().await, 1);
 
-                ::std::mem::drop(conn);
+        ::std::mem::drop(conn);
 
-                assert_eq!(pool.idle_conns(), 2);
-                Ok(())
-            })
-        });
+        // The connection is added back to the pool asynchronously, so we need
+        // to wait for the future to finish.
+        delay_for(Duration::from_secs(1)).await;
 
-        Runtime::new()
-            .expect("could not run")
-            .block_on(future)
-            .expect("could not run");
+        assert_eq!(pool.idle_conns().await, 2);
     }
 }

@@ -40,15 +40,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crossbeam::queue::SegQueue;
-use futures::sync::oneshot;
-use futures::Future;
-use std::sync::{Arc, Mutex};
+use crossbeam_queue::SegQueue;
+use futures::channel::oneshot;
+use futures::lock::Mutex;
+use std::sync::Arc;
 
-use manage_connection::ManageConnection;
-use queue::{Live, Queue};
-use Config;
-use Error;
+use crate::manage_connection::ManageConnection;
+use crate::queue::{Live, Queue};
+use crate::Config;
+use crate::Error;
 
 /// Inner connection pool. Handles creating and holding the connections, as well as keeping track of
 /// futures that are waiting on connections.
@@ -79,8 +79,8 @@ impl<C: ManageConnection> ConnectionPool<C> {
         self.config.max_size
     }
 
-    pub fn connect(&self) -> Box<dyn Future<Item = C::Connection, Error = Error<C::Error>> + Send> {
-        self.manager.connect()
+    pub async fn connect(&self) -> Result<C::Connection, Error<C::Error>> {
+        self.manager.connect().await
     }
 
     /// Adds a "waiter" to the queue of waiting futures. When a new connection becomes available,
@@ -92,7 +92,7 @@ impl<C: ManageConnection> ConnectionPool<C> {
     pub fn try_waiting(
         &self,
     ) -> Option<oneshot::Sender<Live<<C as ManageConnection>::Connection>>> {
-        self.waiting.try_pop()
+        self.waiting.pop().ok()
     }
 
     pub fn has_broken(&self, conn: &mut Live<C::Connection>) -> bool {

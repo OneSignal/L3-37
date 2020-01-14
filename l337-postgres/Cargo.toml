@@ -2,10 +2,15 @@
 name = "l337-postgres"
 version = "0.2.0"
 authors = ["Jonathon Sheffield <samsmug@gmail.com>"]
+edition = "2018"
 
 [dependencies]
 l337 = { path = ".." }
-futures = "0.1.14"
-tokio = "0.1.8"
-tokio-postgres = "0.4.0-rc.2"
+futures = "0.3"
+tokio = "0.2"
+tokio-postgres = "0.5.1"
 log = "0.4.8"
+async-trait = "0.1.22"
+
+[dev-dependencies]
+tokio = { version = "0.2", features = ["macros"] }

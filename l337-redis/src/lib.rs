@@ -56,6 +56,43 @@ impl ConnectionLike for AsyncConnection {
     }
 }
 
+/// Rewite of redis::transaction for use with an async connection
+pub async fn async_transaction<
+    C: ConnectionLike,
+    K: redis::ToRedisArgs,
+    T,
+    Fut: futures::Future<Output = redis::RedisResult<Option<T>>>,
+    F: FnMut(&mut C, &mut Pipeline) -> Fut,
+>(
+    con: &mut C,
+    keys: &[K],
+    func: F,
+) -> redis::RedisResult<T> {
+    let mut func = func;
+    loop {
+        redis::cmd("WATCH")
+            .arg(keys)
+            .query_async::<_, ()>(&mut *con)
+            .await?;
+
+        let mut p = redis::pipe();
+        let response: Option<T> = func(con, p.atomic()).await?;
+        match response {
+            None => {
+                continue;
+            }
+            Some(response) => {
+                // make sure no watch is left in the connection, even if
+                // someone forgot to use the pipeline.
+                redis::cmd("UNWATCH")
+                    .query_async::<_, ()>(&mut *con)
+                    .await?;
+                return Ok(response);
+            }
+        }
+    }
+}
+
 #[async_trait]
 impl l337::ManageConnection for RedisConnectionManager {
     type Connection = AsyncConnection;

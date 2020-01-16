@@ -12,7 +12,10 @@ extern crate log;
 extern crate async_trait;
 
 use futures::channel::oneshot;
-use std::ops::{Deref, DerefMut};
+use std::{
+    convert::{AsMut, AsRef},
+    ops::{Deref, DerefMut},
+};
 use tokio::spawn;
 use tokio_postgres::error::Error;
 use tokio_postgres::{
@@ -39,6 +42,18 @@ impl Deref for AsyncConnection {
 impl DerefMut for AsyncConnection {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.client
+    }
+}
+
+impl AsMut<Client> for AsyncConnection {
+    fn as_mut(&mut self) -> &mut Client {
+        &mut self.client
+    }
+}
+
+impl AsRef<Client> for AsyncConnection {
+    fn as_ref(&self) -> &Client {
+        &self.client
     }
 }
 

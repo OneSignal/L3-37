@@ -56,7 +56,29 @@ impl ConnectionLike for AsyncConnection {
     }
 }
 
-/// Rewite of redis::transaction for use with an async connection
+/// Rewite of redis::transaction for use with an async connection. It is assumed
+/// that the fn's return value will be the return value of Pipeline::query_async.
+/// Returning None from this fn will cause it to be re-run, as that is the value
+/// returned from Pipeline::query_async when run in atomic mode, and the watched
+/// keys are modified somewhere else.
+///
+/// ```rust,no_run
+/// use redis::AsyncCommands;
+/// # async fn do_something() -> redis::RedisResult<()> {
+/// # let client = redis::Client::open("redis://127.0.0.1/").unwrap();
+/// # let mut con = client.get_async_connection().unwrap();
+/// let key = "the_key";
+/// let (new_val,) : (isize,) = l337_redis::async_transaction(&mut con, &[key], |con, pipe| async {
+///     let old_val : isize = con.get(key).await?;
+///     pipe
+///         .set(key, old_val + 1).ignore()
+///         .get(key)
+///         .query_async(con)
+///         .await
+/// })?;
+/// println!("The incremented number is: {}", new_val);
+/// # Ok(()) }
+/// ```
 pub async fn async_transaction<
     C: ConnectionLike,
     K: redis::ToRedisArgs,

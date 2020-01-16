@@ -22,7 +22,6 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use crate::Error as L337Error;
-use std::fmt::Debug;
 
 /// A trait which provides connection-specific functionality.
 #[async_trait]
@@ -31,7 +30,7 @@ pub trait ManageConnection: Send + Sync + 'static {
     type Connection: Send + 'static;
 
     /// The error type returned by `Connection`s.
-    type Error: Send + 'static + Debug;
+    type Error: failure::Fail;
 
     /// Attempts to create a new connection.
     ///

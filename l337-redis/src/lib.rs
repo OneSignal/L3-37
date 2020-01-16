@@ -10,7 +10,7 @@ extern crate async_trait;
 #[macro_use]
 extern crate log;
 
-use futures::channel::oneshot;
+use futures::{channel::oneshot, future::BoxFuture};
 use redis::aio::{ConnectionLike, MultiplexedConnection};
 use redis::{Client, Cmd, IntoConnectionInfo, Pipeline, RedisError, RedisFuture, Value};
 
@@ -64,32 +64,32 @@ impl ConnectionLike for AsyncConnection {
 ///
 /// ```rust,no_run
 /// use redis::AsyncCommands;
+/// use futures::prelude::*;
 /// # async fn do_something() -> redis::RedisResult<()> {
 /// # let client = redis::Client::open("redis://127.0.0.1/").unwrap();
-/// # let mut con = client.get_async_connection().unwrap();
+/// # let mut con = client.get_async_connection().await.unwrap();
 /// let key = "the_key";
-/// let (new_val,) : (isize,) = l337_redis::async_transaction(&mut con, &[key], |con, pipe| async {
+/// let (new_val,) : (isize,) = l337_redis::async_transaction(&mut con, &[key], |con, pipe| async move {
 ///     let old_val : isize = con.get(key).await?;
 ///     pipe
 ///         .set(key, old_val + 1).ignore()
 ///         .get(key)
 ///         .query_async(con)
 ///         .await
-/// })?;
+/// }.boxed()).await?;
 /// println!("The incremented number is: {}", new_val);
 /// # Ok(()) }
 /// ```
-pub async fn async_transaction<
-    C: ConnectionLike,
-    K: redis::ToRedisArgs,
-    T,
-    Fut: futures::Future<Output = redis::RedisResult<Option<T>>>,
-    F: FnMut(&mut C, &mut Pipeline) -> Fut,
->(
+pub async fn async_transaction<C, K, T, F>(
     con: &mut C,
     keys: &[K],
     func: F,
-) -> redis::RedisResult<T> {
+) -> redis::RedisResult<T>
+where
+    C: ConnectionLike,
+    K: redis::ToRedisArgs,
+    F: for<'a> FnMut(&'a mut C, &'a mut Pipeline) -> BoxFuture<'a, redis::RedisResult<Option<T>>>,
+{
     let mut func = func;
     loop {
         redis::cmd("WATCH")

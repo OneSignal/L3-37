@@ -32,10 +32,37 @@ impl RedisConnectionManager {
 }
 
 pub struct AsyncConnection {
-    conn: MultiplexedConnection,
+    pub conn: MultiplexedConnection,
     receiver: oneshot::Receiver<()>,
     broken: bool,
 }
+
+impl Deref for AsyncConnection {
+    type Target = MultiplexedConnection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.conn
+    }
+}
+
+impl DerefMut for AsyncConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.conn
+    }
+}
+
+impl AsMut<MultiplexedConnection> for AsyncConnection {
+    fn as_mut(&mut self) -> &mut MultiplexedConnection {
+        &mut self.conn
+    }
+}
+
+impl AsRef<MultiplexedConnection> for AsyncConnection {
+    fn as_ref(&self) -> &MultiplexedConnection {
+        &self.conn
+    }
+}
+
 
 impl ConnectionLike for AsyncConnection {
     fn req_packed_command<'a>(&'a mut self, cmd: &'a Cmd) -> RedisFuture<'a, Value> {

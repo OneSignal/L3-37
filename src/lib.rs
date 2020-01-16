@@ -70,6 +70,7 @@ use tokio::time;
 use crate::error::InternalError;
 
 pub use conn::Conn;
+pub use error::Error;
 pub use manage_connection::ManageConnection;
 
 use inner::ConnectionPool;
@@ -88,15 +89,6 @@ pub struct Config {
     pub min_size: usize,
     /// Max number of connections to keep in the pool
     pub max_size: usize,
-}
-
-/// Error type returned by this module
-#[derive(Debug)]
-pub enum Error<E: Send + 'static> {
-    /// Error coming from the connection pooling itself
-    Internal(error::InternalError),
-    /// Error from the connection manager or the underlying client
-    External(E),
 }
 
 impl Default for Config {
@@ -327,6 +319,10 @@ mod tests {
     #[derive(Debug)]
     pub struct DummyManager {}
 
+    #[derive(Debug, Fail)]
+    #[fail(display = "DummyError")]
+    pub struct DummyError;
+
     impl DummyManager {
         pub fn new() -> Self {
             Self {}
@@ -336,7 +332,7 @@ mod tests {
     #[async_trait]
     impl ManageConnection for DummyManager {
         type Connection = ();
-        type Error = ();
+        type Error = DummyError;
 
         async fn connect(&self) -> Result<Self::Connection, Error<Self::Error>> {
             Ok(())

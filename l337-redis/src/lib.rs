@@ -14,6 +14,11 @@ use futures::channel::oneshot;
 use redis::aio::{ConnectionLike, MultiplexedConnection};
 use redis::{Client, Cmd, IntoConnectionInfo, Pipeline, RedisError, RedisFuture, Value};
 
+use std::{
+    convert::{AsMut, AsRef},
+    ops::{Deref, DerefMut},
+};
+
 type Result<T> = std::result::Result<T, RedisError>;
 
 /// A `ManageConnection` for `RedisConnections`s.
@@ -32,9 +37,35 @@ impl RedisConnectionManager {
 }
 
 pub struct AsyncConnection {
-    conn: MultiplexedConnection,
+    pub conn: MultiplexedConnection,
     receiver: oneshot::Receiver<()>,
     broken: bool,
+}
+
+impl Deref for AsyncConnection {
+    type Target = MultiplexedConnection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.conn
+    }
+}
+
+impl DerefMut for AsyncConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.conn
+    }
+}
+
+impl AsMut<MultiplexedConnection> for AsyncConnection {
+    fn as_mut(&mut self) -> &mut MultiplexedConnection {
+        &mut self.conn
+    }
+}
+
+impl AsRef<MultiplexedConnection> for AsyncConnection {
+    fn as_ref(&self) -> &MultiplexedConnection {
+        &self.conn
+    }
 }
 
 impl ConnectionLike for AsyncConnection {

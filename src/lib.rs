@@ -84,14 +84,8 @@ pub struct Pool<C: ManageConnection + Send> {
 
 impl<C: ManageConnection + Send + fmt::Debug> fmt::Debug for Pool<C> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (total, idle) = futures::executor::block_on(async {
-            futures::join!(self.total_conns(), self.idle_conns())
-        });
-
         f.debug_struct("Pool")
             .field("conn_pool", &self.conn_pool)
-            .field("total_conns", &total)
-            .field("idle_conns", &idle)
             .finish()
     }
 }

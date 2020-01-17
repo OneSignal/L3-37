@@ -85,7 +85,7 @@ where
     T: 'static + MakeTlsConnect<Socket> + Clone + Send + Sync,
     T::Stream: Send + Sync,
     T::TlsConnect: Send,
-    <T::TlsConnect as TlsConnect<Socket>>::Future: Send + Sync,
+    <T::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     type Connection = AsyncConnection;
     type Error = Error;

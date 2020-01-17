@@ -43,6 +43,7 @@
 use crossbeam_queue::SegQueue;
 use futures::channel::oneshot;
 use futures::lock::Mutex;
+use std::fmt;
 use std::sync::Arc;
 
 use crate::manage_connection::ManageConnection;
@@ -62,6 +63,16 @@ pub struct ConnectionPool<C: ManageConnection + Send> {
     manager: C,
     /// Configuration for the pool
     config: Config,
+}
+
+impl<C: ManageConnection + Send + fmt::Debug> fmt::Debug for ConnectionPool<C> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ConnectionPool")
+            .field("waiting_count", &self.waiting.len())
+            .field("manager", &self.manager)
+            .field("config", &self.config)
+            .finish()
+    }
 }
 
 impl<C: ManageConnection> ConnectionPool<C> {

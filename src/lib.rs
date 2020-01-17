@@ -63,6 +63,7 @@ use futures::channel::oneshot;
 use futures::future::{self};
 use futures::prelude::*;
 use futures::stream;
+use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
@@ -79,6 +80,20 @@ use queue::{Live, Queue};
 /// General connection pool
 pub struct Pool<C: ManageConnection + Send> {
     conn_pool: Arc<ConnectionPool<C>>,
+}
+
+impl<C: ManageConnection + Send + fmt::Debug> fmt::Debug for Pool<C> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let (total, idle) = futures::executor::block_on(async {
+            futures::join!(self.total_conns(), self.idle_conns())
+        });
+
+        f.debug_struct("Pool")
+            .field("conn_pool", &self.conn_pool)
+            .field("total_conns", &total)
+            .field("idle_conns", &idle)
+            .finish()
+    }
 }
 
 /// Configuration for the connection pool

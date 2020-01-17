@@ -10,7 +10,7 @@ extern crate async_trait;
 #[macro_use]
 extern crate log;
 
-use futures::channel::oneshot;
+use futures::{channel::oneshot, future::BoxFuture};
 use redis::aio::{ConnectionLike, MultiplexedConnection};
 use redis::{Client, Cmd, IntoConnectionInfo, Pipeline, RedisError, RedisFuture, Value};
 
@@ -88,59 +88,62 @@ impl ConnectionLike for AsyncConnection {
 }
 
 /// Rewite of redis::transaction for use with an async connection. It is assumed
-/// that the block's return value will be the return value of
-/// Pipeline::query_async. Returning None from this block will cause it to be
-/// re-run, as that is the value returned from Pipeline::query_async when run in
-/// atomic mode, and the watched keys are modified somewhere else.
+/// that the fn's return value will be the return value of Pipeline::query_async.
+/// Returning None from this fn will cause it to be re-run, as that is the value
+/// returned from Pipeline::query_async when run in atomic mode, and the watched
+/// keys are modified somewhere else.
 ///
 /// ```rust,no_run
-/// #[macro_use] extern crate l337_redis;
 /// use redis::AsyncCommands;
+/// use futures::prelude::*;
 /// # async fn do_something() -> redis::RedisResult<()> {
 /// # let client = redis::Client::open("redis://127.0.0.1/").unwrap();
 /// # let mut con = client.get_async_connection().await.unwrap();
 /// let key = "the_key";
-/// let mut count: i32 = 0;
-/// let new_val: i32 = async_transaction!(&mut con, &[key], pipe => {
-///     count += 1;
+/// let (new_val,) : (isize,) = l337_redis::async_transaction(&mut con, &[key], |con, pipe| async move {
 ///     let old_val : isize = con.get(key).await?;
 ///     pipe
 ///         .set(key, old_val + 1).ignore()
 ///         .get(key)
-///         .query_async(&mut con)
-///         .await?
-/// });
-///
+///         .query_async(con)
+///         .await
+/// }.boxed()).await?;
 /// println!("The incremented number is: {}", new_val);
 /// # Ok(()) }
 /// ```
-#[macro_export]
-macro_rules! async_transaction {
-    ($connection:expr, $keys:expr, $pipe:ident => $body:expr) => {
-        loop {
-            redis::cmd("WATCH")
-                .arg($keys)
-                .query_async::<_, ()>($connection)
-                .await?;
+pub async fn async_transaction<C, K, T, F>(
+    con: &mut C,
+    keys: &[K],
+    func: F,
+) -> redis::RedisResult<T>
+where
+    C: ConnectionLike,
+    K: redis::ToRedisArgs,
+    F: for<'a> FnMut(&'a mut C, &'a mut Pipeline) -> BoxFuture<'a, redis::RedisResult<Option<T>>>,
+{
+    let mut func = func;
+    loop {
+        redis::cmd("WATCH")
+            .arg(keys)
+            .query_async::<_, ()>(&mut *con)
+            .await?;
 
-            let mut $pipe = redis::pipe();
-            let response: Option<_> = { $body };
-            match response {
-                None => {
-                    continue;
-                }
-                Some(response) => {
-                    // make sure no watch is left in the connection, even if
-                    // someone forgot to use the pipeline.
-                    redis::cmd("UNWATCH")
-                        .query_async::<_, ()>($connection)
-                        .await?;
-
-                    break response;
-                }
+        let mut p = redis::pipe();
+        let response: Option<T> = func(con, p.atomic()).await?;
+        match response {
+            None => {
+                continue;
+            }
+            Some(response) => {
+                // make sure no watch is left in the connection, even if
+                // someone forgot to use the pipeline.
+                redis::cmd("UNWATCH")
+                    .query_async::<_, ()>(&mut *con)
+                    .await?;
+                return Ok(response);
             }
         }
-    };
+    }
 }
 
 #[async_trait]

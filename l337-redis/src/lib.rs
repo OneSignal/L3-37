@@ -100,7 +100,9 @@ impl ConnectionLike for AsyncConnection {
 /// # let client = redis::Client::open("redis://127.0.0.1/").unwrap();
 /// # let mut con = client.get_async_connection().await.unwrap();
 /// let key = "the_key";
-/// let (new_val,) : (isize,) = l337_redis::async_transaction(&mut con, &[key], |con, pipe| async move {
+/// let mut count = 0i32;
+/// let (new_val,) : (isize,) = l337_redis::async_transaction(&mut con, &[key], &mut count, |con, pipe, count_ref| async move {
+///     *count_ref += 1;
 ///     let old_val : isize = con.get(key).await?;
 ///     pipe
 ///         .set(key, old_val + 1).ignore()
@@ -111,15 +113,20 @@ impl ConnectionLike for AsyncConnection {
 /// println!("The incremented number is: {}", new_val);
 /// # Ok(()) }
 /// ```
-pub async fn async_transaction<C, K, T, F>(
+pub async fn async_transaction<C, K, T, F, Args>(
     con: &mut C,
     keys: &[K],
+    args: &mut Args,
     func: F,
 ) -> redis::RedisResult<T>
 where
     C: ConnectionLike,
     K: redis::ToRedisArgs,
-    F: for<'a> FnMut(&'a mut C, &'a mut Pipeline) -> BoxFuture<'a, redis::RedisResult<Option<T>>>,
+    F: for<'a> FnMut(
+        &'a mut C,
+        &'a mut Pipeline,
+        &'a mut Args,
+    ) -> BoxFuture<'a, redis::RedisResult<Option<T>>>,
 {
     let mut func = func;
     loop {
@@ -129,7 +136,7 @@ where
             .await?;
 
         let mut p = redis::pipe();
-        let response: Option<T> = func(con, p.atomic()).await?;
+        let response: Option<T> = func(con, p.atomic(), args).await?;
         match response {
             None => {
                 continue;
@@ -152,6 +159,7 @@ impl l337::ManageConnection for RedisConnectionManager {
     type Error = RedisError;
 
     async fn connect(&self) -> std::result::Result<Self::Connection, l337::Error<Self::Error>> {
+        debug!("connect: try redis connection");
         let (connection, future) = self
             .client
             .get_multiplexed_async_connection()
@@ -161,6 +169,7 @@ impl l337::ManageConnection for RedisConnectionManager {
         let (tx, rx) = oneshot::channel();
 
         tokio::spawn(async move {
+            debug!("connect: spawn future backing redis connection");
             future.await;
             debug!("Future backing redis connection ended, future calls to this redis connection will fail");
 
@@ -172,6 +181,7 @@ impl l337::ManageConnection for RedisConnectionManager {
             }
         });
 
+        debug!("connect: redis connection established");
         Ok(AsyncConnection {
             conn: connection,
             broken: false,

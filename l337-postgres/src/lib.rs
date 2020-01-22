@@ -91,6 +91,7 @@ where
     type Error = Error;
 
     async fn connect(&self) -> Result<Self::Connection, l337::Error<Self::Error>> {
+        debug!("connect: open postgres connection");
         let (client, connection) = self
             .config
             .connect(self.make_tls_connect.clone())
@@ -99,13 +100,16 @@ where
 
         let (sender, receiver) = oneshot::channel();
         spawn(async move {
+            debug!("connect: start connection future");
             if let Err(_) = connection.await {
                 sender
                     .send(true)
                     .unwrap_or_else(|e| panic!("failed to send shutdown notice: {}", e));
             }
+            info!("connect: connection future ended");
         });
 
+        debug!("connect: postgres connection established");
         Ok(AsyncConnection {
             broken: false,
             client,
@@ -288,6 +292,6 @@ mod tests {
 
         futures::join!(q2, q3);
 
-        assert_eq!(pool.total_conns().await, 2);
+        assert_eq!(pool.total_conns(), 2);
     }
 }

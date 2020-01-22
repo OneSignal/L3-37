@@ -98,9 +98,7 @@ where
         let conn = self.conn.take().unwrap();
         let pool = self.pool.take().unwrap();
 
-        tokio::spawn(async move {
-            pool.put_back(conn).await;
-        });
+        pool.put_back(conn);
     }
 }
 
@@ -121,10 +119,10 @@ mod tests {
         };
 
         let pool = Pool::new(mngr, config).await.unwrap();
-        assert_eq!(pool.idle_conns().await, 2);
+        assert_eq!(pool.idle_conns(), 2);
 
         let conn = pool.connection().await.unwrap();
-        assert_eq!(pool.idle_conns().await, 1);
+        assert_eq!(pool.idle_conns(), 1);
 
         ::std::mem::drop(conn);
 
@@ -132,6 +130,6 @@ mod tests {
         // to wait for the future to finish.
         delay_for(Duration::from_secs(1)).await;
 
-        assert_eq!(pool.idle_conns().await, 2);
+        assert_eq!(pool.idle_conns(), 2);
     }
 }

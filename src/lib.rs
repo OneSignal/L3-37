@@ -161,10 +161,7 @@ impl<C: ManageConnection + Send> Pool<C> {
     /// by calling `.timeout` on the returned future.
     pub async fn connection(&self) -> Result<Conn<C>, Error<C::Error>> {
         {
-            let conns = self.conn_pool.conns.lock().await;
-
-            debug!("connection: acquired connection lock");
-            if let Some(conn) = conns.get() {
+            if let Some(conn) = self.conn_pool.conns.get() {
                 debug!("connection: connection already in pool and ready to go");
                 return Ok(Conn {
                     conn: Some(conn),
@@ -172,10 +169,10 @@ impl<C: ManageConnection + Send> Pool<C> {
                 });
             } else {
                 debug!("connection: try spawn connection");
-                if let Some(conn) = Self::try_spawn_connection(&self, &conns).await {
+                if let Some(conn) = self.try_spawn_connection().await {
                     let conn = conn?;
                     let this = self.clone();
-                    debug!("connection: try spawn connection");
+                    debug!("connection: spawned connection");
 
                     return Ok(Conn {
                         conn: Some(conn),
@@ -211,17 +208,21 @@ impl<C: ManageConnection + Send> Pool<C> {
     /// a future will be returned that resolves to the new connection.
     /// Otherwise, None will be returned
     pub(crate) async fn try_spawn_connection(
-        this: &Self,
-        conns: &Arc<queue::Queue<<C as ManageConnection>::Connection>>,
+        &self,
     ) -> Option<Result<Live<C::Connection>, Error<C::Error>>> {
-        if conns.safe_increment(this.conn_pool.max_size()).is_some() {
-            let conns = Arc::clone(&conns);
-            let result = match this.conn_pool.connect().await {
+        if self
+            .conn_pool
+            .conns
+            .safe_increment(self.conn_pool.max_size())
+            .is_some()
+        {
+            debug!("try_spawn_connection: starting connection");
+            let result = match self.conn_pool.connect().await {
                 Ok(conn) => Ok(Live::new(conn)),
                 Err(err) => {
                     // if we weren't able to make a new connection, we need to decrement
                     // connections, since we preincremented the connection count for this  one
-                    conns.decrement();
+                    self.conn_pool.conns.decrement();
                     Err(err)
                 }
             };
@@ -235,16 +236,16 @@ impl<C: ManageConnection + Send> Pool<C> {
     /// of two outcomes:
     /// * The connection will be passed to a waiting future, if any exist.
     /// * The connection will be put back into the connection pool.
-    pub async fn put_back(&self, mut conn: Live<C::Connection>) {
+    pub fn put_back(&self, mut conn: Live<C::Connection>) {
         debug!("put_back: start put back");
 
         let broken = self.conn_pool.has_broken(&mut conn);
-        let conns = self.conn_pool.conns.lock().await;
-        debug!("put_back: got lock for put back");
-
         if broken {
-            conns.decrement();
-            debug!("connection count is now: {:?}", conns.total());
+            self.conn_pool.conns.decrement();
+            debug!(
+                "connection count is now: {:?}",
+                self.conn_pool.conns.total()
+            );
             self.spawn_new_future_loop();
             return;
         }
@@ -265,7 +266,7 @@ impl<C: ManageConnection + Send> Pool<C> {
 
         // If there are no waiting requests & we aren't over the max idle
         // connections limit, attempt to store it back in the pool
-        conns.store(conn);
+        self.conn_pool.conns.store(conn);
     }
 
     fn spawn_new_future_loop(&self) {
@@ -282,13 +283,10 @@ impl<C: ManageConnection + Send> Pool<C> {
                         // However, this means we have to call increment before calling put_back,
                         // as put_back assumes that the connection already exists.
                         // This could probably use some refactoring
-                        let conns = this.conn_pool.conns.lock().await;
                         debug!("creating new connection from spawn loop");
-                        conns.increment();
-                        // Drop so we free the lock
-                        ::std::mem::drop(conns);
+                        this.conn_pool.conns.increment();
 
-                        this.put_back(Live::new(conn)).await;
+                        this.put_back(Live::new(conn));
 
                         break;
                     }
@@ -306,15 +304,13 @@ impl<C: ManageConnection + Send> Pool<C> {
     }
 
     /// The total number of connections in the pool.
-    pub async fn total_conns(&self) -> usize {
-        let conns = self.conn_pool.conns.lock().await;
-        conns.total()
+    pub fn total_conns(&self) -> usize {
+        self.conn_pool.conns.total()
     }
 
     /// The number of idle connections in the pool.
-    pub async fn idle_conns(&self) -> usize {
-        let conns = self.conn_pool.conns.lock().await;
-        conns.idle()
+    pub fn idle_conns(&self) -> usize {
+        self.conn_pool.conns.idle()
     }
 }
 
@@ -440,8 +436,8 @@ mod tests {
             loop_run(Arc::clone(&count), Arc::clone(&pool))
         );
 
-        assert_eq!(pool.total_conns().await, 2);
-        assert_eq!(pool.idle_conns().await, 2);
+        assert_eq!(pool.total_conns(), 2);
+        assert_eq!(pool.idle_conns(), 2);
     }
 
     async fn loop_run(count: Arc<AtomicUsize>, pool: Arc<Pool<DummyManager>>) {

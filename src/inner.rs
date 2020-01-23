@@ -42,7 +42,6 @@
 
 use crossbeam_queue::SegQueue;
 use futures::channel::oneshot;
-use futures::lock::Mutex;
 use std::fmt;
 use std::sync::Arc;
 
@@ -55,7 +54,7 @@ use crate::Error;
 /// futures that are waiting on connections.
 pub struct ConnectionPool<C: ManageConnection + Send> {
     /// Queue of connections in the pool
-    pub conns: Mutex<Arc<Queue<C::Connection>>>,
+    pub conns: Arc<Queue<C::Connection>>,
     /// Queue of oneshot's that are waiting to be given a new connection when the current pool is
     /// already saturated.
     waiting: SegQueue<oneshot::Sender<Live<C::Connection>>>,
@@ -79,7 +78,7 @@ impl<C: ManageConnection> ConnectionPool<C> {
     /// Creates a new connection pool
     pub fn new(conns: Queue<C::Connection>, manager: C, config: Config) -> ConnectionPool<C> {
         ConnectionPool {
-            conns: Mutex::new(Arc::new(conns)),
+            conns: Arc::new(conns),
             waiting: SegQueue::new(),
             manager,
             config,

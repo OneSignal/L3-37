@@ -84,7 +84,6 @@ impl<T: Send> Idle<T> {
 #[derive(Debug)]
 pub struct Queue<C: Send> {
     idle: SegQueue<Idle<C>>,
-    idle_count: AtomicUsize,
     total_count: AtomicUsize,
 }
 
@@ -93,7 +92,6 @@ impl<C: Send> Queue<C> {
     pub fn new() -> Queue<C> {
         Queue {
             idle: SegQueue::new(),
-            idle_count: AtomicUsize::new(0),
             total_count: AtomicUsize::new(0),
         }
     }
@@ -101,7 +99,7 @@ impl<C: Send> Queue<C> {
     /// Count of idle connection in queue
     #[inline(always)]
     pub fn idle(&self) -> usize {
-        self.idle_count.load(Ordering::SeqCst)
+        self.idle.len()
     }
 
     /// Count of total connections active
@@ -120,16 +118,12 @@ impl<C: Send> Queue<C> {
     /// Store a connection which has already been counted in the queue
     /// (this will NOT increment the total connection count).
     pub fn store(&self, conn: Live<C>) {
-        self.idle_count.fetch_add(1, Ordering::SeqCst);
         self.idle.push(Idle::new(conn));
     }
 
     /// Get the longest-idle connection from the queue.
     pub fn get(&self) -> Option<Live<C>> {
-        self.idle.pop().ok().map(|Idle { conn, .. }| {
-            self.idle_count.fetch_sub(1, Ordering::SeqCst);
-            conn
-        })
+        self.idle.pop().ok().map(|Idle { conn, .. }| conn)
     }
 
     /// Increment the connection count without pushing a connection into the

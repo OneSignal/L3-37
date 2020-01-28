@@ -173,12 +173,10 @@ impl l337::ManageConnection for RedisConnectionManager {
             future.await;
             debug!("Future backing redis connection ended, future calls to this redis connection will fail");
 
-            if let Err(e) = tx.send(()) {
-                error!(
-                    "Failed to alert redis client that connection has ended: {:?}",
-                    e
-                );
-            }
+            // If there was an error sending this message, it means that the
+            // RedisConnectionManager has died, and there is no need to notify
+            // it that this connection has died.
+            let _ = tx.send(());
         });
 
         debug!("connect: redis connection established");

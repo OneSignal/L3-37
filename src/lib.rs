@@ -58,6 +58,7 @@ mod error;
 mod inner;
 mod manage_connection;
 mod queue;
+mod wait;
 
 use futures::channel::oneshot;
 use futures::future::{self};
@@ -69,6 +70,7 @@ use std::time::Duration;
 use tokio::time;
 
 use crate::error::InternalError;
+use crate::wait::run_future_with_interval;
 
 pub use conn::Conn;
 pub use error::Error;
@@ -169,7 +171,19 @@ impl<C: ManageConnection + Send> Pool<C> {
                 });
             } else {
                 debug!("connection: try spawn connection");
-                if let Some(conn) = self.try_spawn_connection().await {
+                if let Some(conn) = run_future_with_interval(
+                    |time| {
+                        info!(
+                            "connection: try_spawn_connection has been running for {:?}. Total connections: {}",
+                            time,
+                            self.total_conns(),
+                        );
+                    },
+                    Duration::from_secs(5),
+                    self.try_spawn_connection(),
+                )
+                .await
+                {
                     let conn = conn?;
                     let this = self.clone();
                     debug!("connection: spawned connection");
@@ -191,7 +205,19 @@ impl<C: ManageConnection + Send> Pool<C> {
         let this = self.clone();
         debug!("connection: waiting for connection");
 
-        let conn = rx.await.map_err(|_| {
+        let receive_future = run_future_with_interval(
+            |time| {
+                info!(
+                    "connection: waiting for connection to be returned to pool for {:?}. Total connections: {}",
+                    time,
+                    self.total_conns(),
+                );
+            },
+            Duration::from_secs(5),
+            rx,
+        );
+
+        let conn = receive_future.await.map_err(|_| {
             Error::Internal(InternalError::Other(
                 "Connection channel was closed unexpectedly".into(),
             ))

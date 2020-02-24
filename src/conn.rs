@@ -66,6 +66,29 @@ where
     /// normal operation. This is an option so we can take the connection on
     /// drop, and push it back into the pool
     pub pool: Option<Pool<C>>,
+
+    /// If true, this connection will be returned to the pool when it is dropped.
+    /// Otherwise, it will be forgotten.
+    should_be_put_back: bool,
+}
+
+impl<C> Conn<C>
+where
+    C: ManageConnection,
+    C::Connection: Send,
+{
+    pub(crate) fn new(connection: Live<C::Connection>, pool: Pool<C>) -> Self {
+        Self {
+            conn: Some(connection),
+            pool: Some(pool),
+            should_be_put_back: true,
+        }
+    }
+
+    pub(crate) fn forget(mut self) {
+        self.should_be_put_back = false;
+        drop(self);
+    }
 }
 
 impl<C> Deref for Conn<C>
@@ -95,6 +118,10 @@ where
     C::Connection: Send,
 {
     fn drop(&mut self) {
+        if !self.should_be_put_back {
+            return;
+        }
+
         let conn = self.conn.take().unwrap();
         let pool = self.pool.take().unwrap();
 

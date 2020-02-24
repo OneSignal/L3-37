@@ -10,7 +10,10 @@ extern crate async_trait;
 #[macro_use]
 extern crate log;
 
-use futures::{channel::oneshot, future::BoxFuture};
+use futures::{
+    channel::oneshot,
+    future::{self, BoxFuture},
+};
 use redis::aio::{ConnectionLike, MultiplexedConnection};
 use redis::{Client, Cmd, IntoConnectionInfo, Pipeline, RedisError, RedisFuture, Value};
 
@@ -38,8 +41,17 @@ impl RedisConnectionManager {
 
 pub struct AsyncConnection {
     pub conn: MultiplexedConnection,
-    receiver: oneshot::Receiver<()>,
+    done_rx: oneshot::Receiver<()>,
+    drop_tx: Option<oneshot::Sender<()>>,
     broken: bool,
+}
+
+impl Drop for AsyncConnection {
+    fn drop(&mut self) {
+        if let Some(drop_tx) = self.drop_tx.take() {
+            let _ = drop_tx.send(());
+        }
+    }
 }
 
 impl Deref for AsyncConnection {
@@ -166,24 +178,28 @@ impl l337::ManageConnection for RedisConnectionManager {
             .await
             .map_err(l337::Error::External)?;
 
-        let (tx, rx) = oneshot::channel();
+        let (done_tx, done_rx) = oneshot::channel();
+        let (drop_tx, drop_rx) = oneshot::channel();
 
         tokio::spawn(async move {
             debug!("connect: spawn future backing redis connection");
-            future.await;
+            futures::pin_mut!(future, drop_rx);
+
+            future::select(future, drop_rx).await;
             debug!("Future backing redis connection ended, future calls to this redis connection will fail");
 
             // If there was an error sending this message, it means that the
             // RedisConnectionManager has died, and there is no need to notify
             // it that this connection has died.
-            let _ = tx.send(());
+            let _ = done_tx.send(());
         });
 
         debug!("connect: redis connection established");
         Ok(AsyncConnection {
             conn: connection,
             broken: false,
-            receiver: rx,
+            done_rx,
+            drop_tx: Some(drop_tx),
         })
     }
 
@@ -191,12 +207,16 @@ impl l337::ManageConnection for RedisConnectionManager {
         &self,
         conn: &mut Self::Connection,
     ) -> std::result::Result<(), l337::Error<Self::Error>> {
-        redis::cmd("PING")
+        let result = redis::cmd("PING")
             .query_async::<_, ()>(conn)
             .await
-            .map_err(l337::Error::External)?;
+            .map_err(l337::Error::External);
 
-        Ok(())
+        if result.is_err() {
+            conn.broken = true;
+        }
+
+        result
     }
 
     fn has_broken(&self, conn: &mut Self::Connection) -> bool {
@@ -207,7 +227,7 @@ impl l337::ManageConnection for RedisConnectionManager {
         // Use try_recv() as `has_broken` can be called via Drop and not have a
         // future Context to poll on.
         // https://docs.rs/futures/0.3.1/futures/channel/oneshot/struct.Receiver.html#method.try_recv
-        match conn.receiver.try_recv() {
+        match conn.done_rx.try_recv() {
             // If we get any message, the connection task stopped, which means this connection is
             // now dead
             Ok(Some(())) => {

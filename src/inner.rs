@@ -105,6 +105,10 @@ impl<C: ManageConnection> ConnectionPool<C> {
         self.waiting.pop().ok()
     }
 
+    pub async fn is_valid(&self, conn: &mut C::Connection) -> Result<(), Error<C::Error>> {
+        self.manager.is_valid(conn).await
+    }
+
     pub fn has_broken(&self, conn: &mut Live<C::Connection>) -> bool {
         self.manager.has_broken(&mut conn.conn)
     }

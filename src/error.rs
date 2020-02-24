@@ -2,6 +2,9 @@
 pub enum InternalError {
     #[fail(display = "unknown error: {}", _0)]
     Other(String),
+
+    #[fail(display = "Tried to get a connection from the pool, but all connections were invalid")]
+    AllConnectionsInvalid,
 }
 
 /// Error type returned by this module

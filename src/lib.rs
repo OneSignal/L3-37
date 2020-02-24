@@ -162,13 +162,43 @@ impl<C: ManageConnection + Send> Pool<C> {
     /// This **does not** implement any timeout functionality. Timeout functionality can be added
     /// by calling `.timeout` on the returned future.
     pub async fn connection(&self) -> Result<Conn<C>, Error<C::Error>> {
+        for _ in 0..self.conn_pool.max_size() {
+            let mut connection = self.connection_inner().await?;
+
+            match self.conn_pool.is_valid(&mut connection).await {
+                Ok(()) => return Ok(connection),
+                Err(e) => {
+                    debug!(
+                        "connection: found connection in pool that is no longer valid - removing from pool: {:?}",
+                        e
+                    );
+
+                    connection.forget();
+
+                    self.conn_pool.conns.decrement();
+                    debug!(
+                        "connection count is now: {:?}",
+                        self.conn_pool.conns.total()
+                    );
+                    self.spawn_new_future_loop();
+
+                    // In my experience, unconstrained loops in async fns are
+                    // problematic because tokio's scheduler will allow the task
+                    // to block up the runtime, so it is useful to add some
+                    // delays to loops to allow other futures to be polled.
+                    tokio::time::delay_for(Duration::from_millis(100)).await;
+                }
+            }
+        }
+
+        Err(Error::Internal(InternalError::AllConnectionsInvalid))
+    }
+
+    async fn connection_inner(&self) -> Result<Conn<C>, Error<C::Error>> {
         {
             if let Some(conn) = self.conn_pool.conns.get() {
                 debug!("connection: connection already in pool and ready to go");
-                return Ok(Conn {
-                    conn: Some(conn),
-                    pool: Some(self.clone()),
-                });
+                return Ok(Conn::new(conn, self.clone()));
             } else {
                 debug!("connection: try spawn connection");
                 if let Some(conn) = run_future_with_interval(
@@ -188,10 +218,10 @@ impl<C: ManageConnection + Send> Pool<C> {
                     let this = self.clone();
                     debug!("connection: spawned connection");
 
-                    return Ok(Conn {
-                        conn: Some(conn),
-                        pool: Some(this),
-                    });
+                    return Ok(Conn::new(
+                        conn,
+                        this,
+                    ));
                 }
             }
         }
@@ -224,10 +254,7 @@ impl<C: ManageConnection + Send> Pool<C> {
         })?;
 
         debug!("connection: got connection after waiting");
-        Ok(Conn {
-            conn: Some(conn),
-            pool: Some(this),
-        })
+        Ok(Conn::new(conn, this))
     }
 
     /// Attempt to spawn a new connection. If we're not already over the max number of connections,
@@ -348,7 +375,16 @@ mod tests {
     use tokio::time::timeout;
 
     #[derive(Debug)]
-    pub struct DummyManager {}
+    pub struct DummyManager {
+        last_id: AtomicUsize,
+    }
+
+    #[derive(Debug)]
+    pub struct DummyValue {
+        id: usize,
+        valid: Arc<AtomicBool>,
+        broken: bool,
+    }
 
     #[derive(Debug, Fail)]
     #[fail(display = "DummyError")]
@@ -356,25 +392,35 @@ mod tests {
 
     impl DummyManager {
         pub fn new() -> Self {
-            Self {}
+            Self {
+                last_id: AtomicUsize::new(0),
+            }
         }
     }
 
     #[async_trait]
     impl ManageConnection for DummyManager {
-        type Connection = ();
+        type Connection = DummyValue;
         type Error = DummyError;
 
         async fn connect(&self) -> Result<Self::Connection, Error<Self::Error>> {
-            Ok(())
+            Ok(DummyValue {
+                id: self.last_id.fetch_add(1, Ordering::SeqCst),
+                valid: Arc::new(AtomicBool::new(true)),
+                broken: false,
+            })
         }
 
-        async fn is_valid(&self, _conn: &mut Self::Connection) -> Result<(), Error<Self::Error>> {
-            unimplemented!()
+        async fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Error<Self::Error>> {
+            if conn.valid.load(Ordering::SeqCst) {
+                Ok(())
+            } else {
+                Err(Error::External(DummyError))
+            }
         }
 
-        fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
-            false
+        fn has_broken(&self, conn: &mut Self::Connection) -> bool {
+            conn.broken
         }
 
         /// Produce an error representing a connection timeout.
@@ -444,6 +490,85 @@ mod tests {
         };
 
         futures::join!(f1, f2);
+    }
+
+    #[tokio::test]
+    async fn it_does_not_return_connections_that_are_invalid() {
+        let mngr = DummyManager::new();
+        let config: Config = Config {
+            max_size: 2,
+            min_size: 1,
+        };
+
+        let pool = Pool::new(mngr, config).await.unwrap();
+
+        let conn1 = pool.connection().await.unwrap();
+
+        let conn1_id = conn1.id;
+        let conn1_valid = Arc::clone(&conn1.valid);
+
+        // return conn1 to the connection pool
+        drop(conn1);
+
+        let conn1 = pool.connection().await.unwrap();
+
+        // The connection is still valid, so this should be the same as the
+        // original connection.
+        assert_eq!(conn1.id, conn1_id);
+
+        // return conn1 to the pool
+        drop(conn1);
+
+        // mark the connection as invalid
+        conn1_valid.store(false, Ordering::SeqCst);
+
+        // we should notice that the connection is invalid and create a new one
+        // before returning it
+        let conn2 = pool.connection().await.unwrap();
+
+        assert_ne!(
+            conn2.id, conn1_id,
+            "Conn1 was returned from the pool even though it is marked as invalid"
+        );
+    }
+
+    #[tokio::test]
+    async fn it_does_not_return_connections_that_are_broken() {
+        let mngr = DummyManager::new();
+        let config: Config = Config {
+            max_size: 2,
+            min_size: 1,
+        };
+
+        let pool = Pool::new(mngr, config).await.unwrap();
+
+        let conn1 = pool.connection().await.unwrap();
+
+        let conn1_id = conn1.id;
+
+        // return conn1 to the connection pool
+        drop(conn1);
+
+        let mut conn1 = pool.connection().await.unwrap();
+
+        // The connection is still valid, so this should be the same as the
+        // original connection.
+        assert_eq!(conn1.id, conn1_id);
+
+        // mark conn1 as broken, it should not be returned to the pool.
+        conn1.broken = true;
+
+        // try to return conn1 to the pool - should not be returned because it
+        // is marked as broken, and a new connection should be spawned in the
+        // background.
+        drop(conn1);
+
+        let conn2 = pool.connection().await.unwrap();
+
+        assert_ne!(
+            conn2.id, conn1_id,
+            "Conn1 was returned from the pool even though it is marked as broken"
+        );
     }
 
     #[tokio::test]

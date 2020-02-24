@@ -496,7 +496,7 @@ mod tests {
     async fn it_does_not_return_connections_that_are_invalid() {
         let mngr = DummyManager::new();
         let config: Config = Config {
-            max_size: 1,
+            max_size: 2,
             min_size: 1,
         };
 
@@ -536,7 +536,7 @@ mod tests {
     async fn it_does_not_return_connections_that_are_broken() {
         let mngr = DummyManager::new();
         let config: Config = Config {
-            max_size: 1,
+            max_size: 2,
             min_size: 1,
         };
 

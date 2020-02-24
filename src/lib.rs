@@ -162,7 +162,7 @@ impl<C: ManageConnection + Send> Pool<C> {
     /// This **does not** implement any timeout functionality. Timeout functionality can be added
     /// by calling `.timeout` on the returned future.
     pub async fn connection(&self) -> Result<Conn<C>, Error<C::Error>> {
-        loop {
+        for _ in 0..self.conn_pool.max_size() {
             let mut connection = self.connection_inner().await?;
 
             match self.conn_pool.is_valid(&mut connection).await {
@@ -190,6 +190,8 @@ impl<C: ManageConnection + Send> Pool<C> {
                 }
             }
         }
+
+        Err(Error::Internal(InternalError::AllConnectionsInvalid))
     }
 
     async fn connection_inner(&self) -> Result<Conn<C>, Error<C::Error>> {

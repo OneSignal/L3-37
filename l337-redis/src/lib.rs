@@ -46,6 +46,9 @@ pub struct AsyncConnection {
     broken: bool,
 }
 
+// Connections can be dropped when they report an error from is_valid, or return
+// true from has_broken. The channel is used here to ensure that the async
+// driver task spawned in RedisConnectionManager::connect is ended.
 impl Drop for AsyncConnection {
     fn drop(&mut self) {
         if let Some(drop_tx) = self.drop_tx.take() {

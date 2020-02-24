@@ -32,6 +32,9 @@ pub struct AsyncConnection {
     drop_tx: Option<oneshot::Sender<()>>,
 }
 
+// Connections can be dropped when they report an error from is_valid, or return
+// true from has_broken. The channel is used here to ensure that the async
+// driver task spawned in PostgresConnectionManager::connect is ended.
 impl Drop for AsyncConnection {
     fn drop(&mut self) {
         // If the receiver is gone here, it means the task is already finished,

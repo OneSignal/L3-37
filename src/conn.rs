@@ -140,10 +140,7 @@ mod tests {
     #[tokio::test]
     async fn conn_pushes_back_into_pool_after_drop() {
         let mngr = DummyManager::new();
-        let config = Config {
-            min_size: 2,
-            max_size: 2,
-        };
+        let config = Config::new().min_size(2).max_size(2);
 
         let pool = Pool::new(mngr, config).await.unwrap();
         assert_eq!(pool.idle_conns(), 2);

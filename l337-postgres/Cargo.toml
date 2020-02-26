@@ -1,13 +1,13 @@
 [package]
 name = "l337-postgres"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["Jonathon Sheffield <samsmug@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 description = "l337 manager for tokio-postgres"
 
 [dependencies]
-l337 = { version = "0.3", path = ".." }
+l337 = { version = "0.4", path = ".." }
 futures = "0.3"
 tokio = "0.2"
 tokio-postgres = "0.5.1"

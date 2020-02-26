@@ -61,7 +61,7 @@ pub struct ConnectionPool<C: ManageConnection + Send> {
     /// Connection manager used to create new connections as needed
     manager: C,
     /// Configuration for the pool
-    config: Config,
+    config: Arc<Config>,
 }
 
 impl<C: ManageConnection + Send + fmt::Debug> fmt::Debug for ConnectionPool<C> {
@@ -76,7 +76,7 @@ impl<C: ManageConnection + Send + fmt::Debug> fmt::Debug for ConnectionPool<C> {
 
 impl<C: ManageConnection> ConnectionPool<C> {
     /// Creates a new connection pool
-    pub fn new(conns: Queue<C::Connection>, manager: C, config: Config) -> ConnectionPool<C> {
+    pub fn new(conns: Queue<C::Connection>, manager: C, config: Arc<Config>) -> ConnectionPool<C> {
         ConnectionPool {
             conns: Arc::new(conns),
             waiting: SegQueue::new(),

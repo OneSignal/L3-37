@@ -53,6 +53,7 @@ extern crate log;
 #[macro_use]
 extern crate async_trait;
 
+mod config;
 mod conn;
 mod error;
 mod inner;
@@ -72,6 +73,7 @@ use tokio::time;
 use crate::error::InternalError;
 use crate::wait::run_future_with_interval;
 
+pub use crate::config::Config;
 pub use conn::Conn;
 pub use error::Error;
 pub use manage_connection::ManageConnection;
@@ -82,6 +84,7 @@ use queue::{Live, Queue};
 /// General connection pool
 pub struct Pool<C: ManageConnection + Send> {
     conn_pool: Arc<ConnectionPool<C>>,
+    config: Arc<Config>,
 }
 
 impl<C: ManageConnection + Send + fmt::Debug> fmt::Debug for Pool<C> {
@@ -89,25 +92,6 @@ impl<C: ManageConnection + Send + fmt::Debug> fmt::Debug for Pool<C> {
         f.debug_struct("Pool")
             .field("conn_pool", &self.conn_pool)
             .finish()
-    }
-}
-
-/// Configuration for the connection pool
-#[derive(Debug)]
-pub struct Config {
-    /// Minimum number of connections in the pool. The pool will be initialied with this number of
-    /// connections
-    pub min_size: usize,
-    /// Max number of connections to keep in the pool
-    pub max_size: usize,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            max_size: 10,
-            min_size: 1,
-        }
     }
 }
 
@@ -119,6 +103,7 @@ where
     fn clone(&self) -> Pool<C> {
         Pool {
             conn_pool: self.conn_pool.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -148,10 +133,12 @@ impl<C: ManageConnection + Send> Pool<C> {
             })
             .await?;
 
-        // Set up the pool once the connections are established
-        let conn_pool = Arc::new(ConnectionPool::new(conns, manager, config));
+        let config = Arc::new(config);
 
-        Ok(Pool { conn_pool })
+        // Set up the pool once the connections are established
+        let conn_pool = Arc::new(ConnectionPool::new(conns, manager, Arc::clone(&config)));
+
+        Ok(Pool { conn_pool, config })
     }
 
     /// Returns a future that resolves to a connection from the pool.
@@ -162,6 +149,10 @@ impl<C: ManageConnection + Send> Pool<C> {
     /// This **does not** implement any timeout functionality. Timeout functionality can be added
     /// by calling `.timeout` on the returned future.
     pub async fn connection(&self) -> Result<Conn<C>, Error<C::Error>> {
+        if !self.config.test_on_check_out {
+            return self.connection_inner().await;
+        }
+
         for _ in 0..self.conn_pool.max_size() {
             let mut connection = self.connection_inner().await?;
 
@@ -443,10 +434,7 @@ mod tests {
     #[tokio::test]
     async fn it_returns_a_non_resolved_future_when_over_pool_limit() {
         let mngr = DummyManager::new();
-        let config: Config = Config {
-            max_size: 1,
-            min_size: 1,
-        };
+        let config: Config = Config::new().min_size(1).max_size(1);
 
         // pool is of size , we try to get 2 connections so the second one will never resolve
         let pool = Pool::new(mngr, config).await.unwrap();
@@ -461,10 +449,7 @@ mod tests {
     #[tokio::test]
     async fn it_allocates_new_connections_up_to_max_size() {
         let mngr = DummyManager::new();
-        let config: Config = Config {
-            max_size: 2,
-            min_size: 1,
-        };
+        let config: Config = Config::new().min_size(1).max_size(2);
 
         // pool is of size 1, but is allowed to generate new connections up to 2.
         // When we try 2 connections, they should both pass without timing out
@@ -495,10 +480,7 @@ mod tests {
     #[tokio::test]
     async fn it_does_not_return_connections_that_are_invalid() {
         let mngr = DummyManager::new();
-        let config: Config = Config {
-            max_size: 2,
-            min_size: 1,
-        };
+        let config: Config = Config::new().max_size(2).min_size(1);
 
         let pool = Pool::new(mngr, config).await.unwrap();
 
@@ -533,12 +515,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_does_return_connections_that_are_invalid_if_so_configured() {
+        let mngr = DummyManager::new();
+        let config: Config = Config::new()
+            .max_size(2)
+            .min_size(1)
+            .test_on_check_out(false);
+
+        let pool = Pool::new(mngr, config).await.unwrap();
+
+        let conn1 = pool.connection().await.unwrap();
+
+        let conn1_id = conn1.id;
+        let conn1_valid = Arc::clone(&conn1.valid);
+
+        // return conn1 to the connection pool
+        drop(conn1);
+
+        let conn1 = pool.connection().await.unwrap();
+
+        // The connection is still valid, so this should be the same as the
+        // original connection.
+        assert_eq!(conn1.id, conn1_id);
+
+        // return conn1 to the pool
+        drop(conn1);
+
+        // mark the connection as invalid
+        conn1_valid.store(false, Ordering::SeqCst);
+
+        // we should notice that the connection is invalid and create a new one
+        // before returning it
+        let conn1 = pool.connection().await.unwrap();
+
+        assert_eq!(
+            conn1.id, conn1_id,
+            "Conn1 was not returned from the pool even though it is marked as invalid, and the pool should not check validity"
+        );
+    }
+
+    #[tokio::test]
     async fn it_does_not_return_connections_that_are_broken() {
         let mngr = DummyManager::new();
-        let config: Config = Config {
-            max_size: 2,
-            min_size: 1,
-        };
+        let config: Config = Config::new().max_size(2).min_size(1);
 
         let pool = Pool::new(mngr, config).await.unwrap();
 
@@ -575,10 +594,7 @@ mod tests {
     async fn test_can_be_accessed_by_mutliple_futures_concurrently() {
         let mngr = DummyManager::new();
 
-        let config = Config {
-            min_size: 2,
-            max_size: 2,
-        };
+        let config = Config::new().min_size(2).max_size(2);
         let pool = Arc::new(Pool::new(mngr, config).await.unwrap());
         let count = Arc::new(AtomicUsize::new(0));
 

@@ -159,6 +159,10 @@ where
             return true;
         }
 
+        if conn.client.is_closed() {
+            return true;
+        }
+
         // Use try_recv() as `has_broken` can be called via Drop and not have a
         // future Context to poll on.
         // https://docs.rs/futures/0.3.1/futures/channel/oneshot/struct.Receiver.html#method.try_recv

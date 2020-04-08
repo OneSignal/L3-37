@@ -146,15 +146,22 @@ impl<C: ManageConnection + Send> Pool<C> {
     /// If there are connections that are available to be used, the future will resolve immediately,
     /// otherwise, the connection will be in a pending state until a future is returned to the pool.
     ///
-    /// This **does not** implement any timeout functionality. Timeout functionality can be added
-    /// by calling `.timeout` on the returned future.
+    /// Timeout ability can be added to this method by calling `connection_timeout` on the `Config`.
     pub async fn connection(&self) -> Result<Conn<C>, Error<C::Error>> {
+        if let Some(timeout) = self.config.connect_timeout {
+            tokio::time::timeout(timeout, self.connect_no_timeout()).await?
+        } else {
+            self.connect_no_timeout().await
+        }
+    }
+
+    async fn connect_no_timeout(&self) -> Result<Conn<C>, Error<C::Error>> {
         if !self.config.test_on_check_out {
-            return self.connection_inner().await;
+            return self.try_get_connection().await;
         }
 
         for _ in 0..self.conn_pool.max_size() {
-            let mut connection = self.connection_inner().await?;
+            let mut connection = self.try_get_connection().await?;
 
             match self.conn_pool.is_valid(&mut connection).await {
                 Ok(()) => return Ok(connection),
@@ -185,7 +192,7 @@ impl<C: ManageConnection + Send> Pool<C> {
         Err(Error::Internal(InternalError::AllConnectionsInvalid))
     }
 
-    async fn connection_inner(&self) -> Result<Conn<C>, Error<C::Error>> {
+    async fn try_get_connection(&self) -> Result<Conn<C>, Error<C::Error>> {
         {
             if let Some(conn) = self.conn_pool.conns.get() {
                 debug!("connection: connection already in pool and ready to go");
@@ -444,6 +451,27 @@ mod tests {
         let result = tokio::time::timeout(Duration::from_millis(10), pool.connection()).await;
 
         assert!(result.is_err(), "didn't timeout");
+    }
+
+    #[tokio::test]
+    async fn it_times_out_when_no_connections_available() {
+        let mngr = DummyManager::new();
+
+        let config = Config::new()
+            .max_size(1)
+            .connection_timeout(Duration::from_millis(100));
+
+        let pool = Pool::new(mngr, config).await.unwrap();
+        let conn1 = pool.connection().await.unwrap();
+
+        let result = pool.connection().await;
+
+        match result {
+            Err(Error::Internal(InternalError::TimedOut)) => {}
+            _ => panic!("connection should timeout"),
+        }
+
+        drop(conn1);
     }
 
     #[tokio::test]

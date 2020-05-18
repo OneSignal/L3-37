@@ -95,6 +95,18 @@ impl<C: ManageConnection + Send + fmt::Debug> fmt::Debug for Pool<C> {
     }
 }
 
+impl<C: ManageConnection> Pool<C> {
+    /// Minimum number of connections in the pool.
+    pub fn min_conns(&self) -> usize {
+        self.config.min_size
+    }
+
+    /// Maximum possible number of connections in the pool.
+    pub fn max_conns(&self) -> usize {
+        self.config.max_size
+    }
+}
+
 /// Returns a new `Pool` referencing the same state as `self`.
 impl<C> Clone for Pool<C>
 where
@@ -425,6 +437,17 @@ mod tests {
         fn timed_out(&self) -> Error<Self::Error> {
             unimplemented!()
         }
+    }
+
+    #[tokio::test]
+    async fn test_min_max_conns() {
+        let mngr = DummyManager::new();
+
+        let config = Config::new().min_size(1).max_size(2);
+        let pool = Arc::new(Pool::new(mngr, config).await.unwrap());
+
+        assert_eq!(pool.min_conns(), 1);
+        assert_eq!(pool.max_conns(), 2);
     }
 
     #[tokio::test]

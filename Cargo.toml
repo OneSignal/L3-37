@@ -1,7 +1,9 @@
 [package]
 name = "l337"
-version = "0.4.1"
-authors = ["Jonathon Sheffield <samsmug@gmail.com>", "Joe Wilm <joe@jwilm.com>"]
+version = "0.4.2"
+authors = ["Jonathon Sheffield <samsmug@gmail.com>",
+           "Joe Wilm <joe@jwilm.com>",
+           "keith Noguchi <keith@onesignal.com>"]
 license = "MIT OR Apache-2.0"
 description = "yet another connection pooler"
 edition = "2018"

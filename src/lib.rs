@@ -59,7 +59,6 @@ mod error;
 mod inner;
 mod manage_connection;
 mod queue;
-mod wait;
 
 use futures::channel::oneshot;
 use futures::future::{self};
@@ -71,7 +70,6 @@ use std::time::Duration;
 use tokio::time;
 
 use crate::error::InternalError;
-use crate::wait::run_future_with_interval;
 
 pub use crate::config::Config;
 pub use conn::Conn;
@@ -211,19 +209,7 @@ impl<C: ManageConnection + Send> Pool<C> {
                 return Ok(Conn::new(conn, self.clone()));
             } else {
                 debug!("connection: try spawn connection");
-                if let Some(conn) = run_future_with_interval(
-                    |time| {
-                        info!(
-                            "connection: try_spawn_connection has been running for {:?}. Total connections: {}",
-                            time,
-                            self.total_conns(),
-                        );
-                    },
-                    Duration::from_secs(5),
-                    self.try_spawn_connection(),
-                )
-                .await
-                {
+                if let Some(conn) = self.try_spawn_connection().await {
                     let conn = conn?;
                     let this = self.clone();
                     debug!("connection: spawned connection");
@@ -245,19 +231,7 @@ impl<C: ManageConnection + Send> Pool<C> {
         let this = self.clone();
         debug!("connection: waiting for connection");
 
-        let receive_future = run_future_with_interval(
-            |time| {
-                info!(
-                    "connection: waiting for connection to be returned to pool for {:?}. Total connections: {}",
-                    time,
-                    self.total_conns(),
-                );
-            },
-            Duration::from_secs(5),
-            rx,
-        );
-
-        let conn = receive_future.await.map_err(|_| {
+        let conn = rx.await.map_err(|_| {
             Error::Internal(InternalError::Other(
                 "Connection channel was closed unexpectedly".into(),
             ))
@@ -270,31 +244,29 @@ impl<C: ManageConnection + Send> Pool<C> {
     /// Attempt to spawn a new connection. If we're not already over the max number of connections,
     /// a future will be returned that resolves to the new connection.
     /// Otherwise, None will be returned
-    pub(crate) async fn try_spawn_connection(
-        &self,
-    ) -> Option<Result<Live<C::Connection>, Error<C::Error>>> {
-        if self
+    async fn try_spawn_connection(&self) -> Option<Result<Live<C::Connection>, Error<C::Error>>> {
+        match self
             .conn_pool
             .conns
             .safe_increment(self.conn_pool.max_size())
-            .is_some()
         {
-            debug!("try_spawn_connection: starting connection");
-            let result = match self.conn_pool.connect().await {
-                Ok(conn) => Ok(Live::new(conn)),
-                Err(err) => {
-                    // if we weren't able to make a new connection, we need to decrement
-                    // connections, since we preincremented the connection count for this  one
-                    self.conn_pool.conns.decrement();
-                    Err(err)
-                }
-            };
-
-            Some(result)
-        } else {
-            None
+            Some(_) => {
+                debug!("try_spawn_connection: starting connection");
+                let result = match self.conn_pool.connect().await {
+                    Ok(conn) => Ok(Live::new(conn)),
+                    Err(err) => {
+                        // if we weren't able to make a new connection, we need to decrement
+                        // connections, since we preincremented the connection count for this one.
+                        self.conn_pool.conns.decrement();
+                        Err(err)
+                    }
+                };
+                Some(result)
+            }
+            None => None,
         }
     }
+
     /// Receive a connection back to be stored in the pool. This could have one
     /// of two outcomes:
     /// * The connection will be passed to a waiting future, if any exist.

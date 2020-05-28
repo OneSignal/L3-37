@@ -170,6 +170,19 @@ impl<C: ManageConnection + Send> Pool<C> {
             return self.try_get_connection().await;
         }
 
+        // We go through the max size loop here to:
+        //
+        // 1) Get a new connection.
+        // 2) Grab a connection from the pool.
+        //
+        // In case 1, it will wait in the future and either get the
+        // new connection or return error.  In case 2, we check the validity
+        // of the connection and remove the invalid connection from the pool
+        // and re-create a new connection, as there will be a new slot for
+        // the connection in the pool.  In case of the network disconnect,
+        // it usually hit the error in the second try and returns error, as
+        // in the case 1 above.  Hence, we usually won't try the case 2 for
+        // `max_size` count.
         for _ in 0..self.conn_pool.max_size() {
             let mut connection = self.try_get_connection().await?;
 

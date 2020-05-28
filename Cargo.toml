@@ -1,6 +1,6 @@
 [package]
 name = "l337"
-version = "0.4.3"
+version = "0.4.4"
 authors = ["Jonathon Sheffield <samsmug@gmail.com>",
            "Joe Wilm <joe@jwilm.com>",
            "keith Noguchi <keith@onesignal.com>"]

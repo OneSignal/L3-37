@@ -347,6 +347,11 @@ impl<C: ManageConnection + Send> Pool<C> {
     pub fn idle_conns(&self) -> usize {
         self.conn_pool.conns.idle()
     }
+
+    /// The number of waiters for the next available connections.
+    pub fn waiters(&self) -> usize {
+        self.conn_pool.waiting.len()
+    }
 }
 
 #[cfg(test)]

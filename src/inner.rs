@@ -54,10 +54,10 @@ use crate::Error;
 /// futures that are waiting on connections.
 pub struct ConnectionPool<C: ManageConnection + Send> {
     /// Queue of connections in the pool
-    pub conns: Arc<Queue<C::Connection>>,
+    pub(crate) conns: Arc<Queue<C::Connection>>,
     /// Queue of oneshot's that are waiting to be given a new connection when the current pool is
     /// already saturated.
-    waiting: SegQueue<oneshot::Sender<Live<C::Connection>>>,
+    pub(crate) waiting: SegQueue<oneshot::Sender<Live<C::Connection>>>,
     /// Connection manager used to create new connections as needed
     manager: C,
     /// Configuration for the pool

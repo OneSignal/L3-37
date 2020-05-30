@@ -281,7 +281,9 @@ impl<C: ManageConnection + Send> Pool<C> {
                 "connection count is now: {:?}",
                 self.conn_pool.conns.total()
             );
-            self.spawn_new_future_loop();
+            if self.config.recreate_broken_connections {
+                self.spawn_new_future_loop();
+            }
             return;
         }
 

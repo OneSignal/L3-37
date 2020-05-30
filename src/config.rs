@@ -6,6 +6,7 @@ pub struct Config {
     pub(crate) min_size: usize,
     pub(crate) max_size: usize,
     pub(crate) test_on_check_out: bool,
+    pub(crate) recreate_broken_connections: bool,
     pub(crate) connect_timeout: Option<Duration>,
 }
 
@@ -34,6 +35,15 @@ impl Config {
         self
     }
 
+    /// If true, the new connection will be created when the broken connection
+    /// is put back to the pool.  Or, it will be just dropped.
+    ///
+    /// Default to true.
+    pub fn recreate_broken_connections(mut self, recreate: bool) -> Self {
+        self.recreate_broken_connections = recreate;
+        self
+    }
+
     /// Minimum number of connections in the pool. The pool will be initialied with this number of
     /// connections
     ///
@@ -58,6 +68,7 @@ impl Default for Config {
             max_size: 10,
             min_size: 1,
             test_on_check_out: true,
+            recreate_broken_connections: true,
             connect_timeout: None,
         }
     }

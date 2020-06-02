@@ -136,7 +136,7 @@ impl<C: ManageConnection + Send> Pool<C> {
 
         // Fold the connections we are creating into a Queue object
         let conns = conns
-            .try_fold(Queue::new(), |conns, conn| {
+            .try_fold(Queue::new(config.idle_queue_size), |conns, conn| {
                 conns.new_conn(Live::new(conn));
 
                 future::ok(conns)
@@ -227,10 +227,7 @@ impl<C: ManageConnection + Send> Pool<C> {
                     let this = self.clone();
                     debug!("connection: spawned connection");
 
-                    return Ok(Conn::new(
-                        conn,
-                        this,
-                    ));
+                    return Ok(Conn::new(conn, this));
                 }
             }
         }
@@ -314,7 +311,9 @@ impl<C: ManageConnection + Send> Pool<C> {
 
         // If there are no waiting requests & we aren't over the max idle
         // connections limit, attempt to store it back in the pool
-        self.conn_pool.conns.store(conn);
+        if self.conn_pool.conns.store(conn).is_err() {
+            debug!("put_back: hit the idle connection queue limit");
+        }
     }
 
     fn spawn_new_future_loop(&self) {
@@ -359,6 +358,11 @@ impl<C: ManageConnection + Send> Pool<C> {
     /// The number of idle connections in the pool.
     pub fn idle_conns(&self) -> usize {
         self.conn_pool.conns.idle()
+    }
+
+    /// The number of errors when the connection push back to the pool.
+    pub fn idle_conns_push_error(&self) -> usize {
+        self.conn_pool.conns.idle_push_error_count()
     }
 
     /// The number of waiters for the next available connections.

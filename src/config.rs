@@ -5,6 +5,7 @@ use std::time::Duration;
 pub struct Config {
     pub(crate) min_size: usize,
     pub(crate) max_size: usize,
+    pub(crate) idle_queue_size: usize,
     pub(crate) test_on_check_out: bool,
     pub(crate) connect_timeout: Option<Duration>,
 }
@@ -48,15 +49,27 @@ impl Config {
     /// Defaults to 10 connections.
     pub fn max_size(mut self, max_size: usize) -> Self {
         self.max_size = max_size;
+        self.idle_queue_size = max_size * IDLE_QUEUE_SIZE_FACTOR;
         self
     }
 }
 
+/// Initial minimum connection count(s) in the pool.
+const MIN_SIZE: usize = 1;
+/// Maximum connections, both active and idle, in the pool.
+const MAX_SIZE: usize = 10;
+/// Idle connection queue size factor applied to the MAX_SIZE above for the idle
+/// connection queue.  This technically should be 1, to make the idle queue size
+/// equal to the maximum number of connection in the pool, as we won't allow the
+/// total number of connections, both live and idel, exceed to maximum size.
+const IDLE_QUEUE_SIZE_FACTOR: usize = 2;
+
 impl Default for Config {
     fn default() -> Self {
         Config {
-            max_size: 10,
-            min_size: 1,
+            max_size: MAX_SIZE,
+            min_size: MIN_SIZE,
+            idle_queue_size: MAX_SIZE * IDLE_QUEUE_SIZE_FACTOR,
             test_on_check_out: true,
             connect_timeout: None,
         }

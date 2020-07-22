@@ -258,7 +258,9 @@ impl l337::ManageConnection for RedisConnectionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use future::join_all;
     use l337::{Config, Pool};
+    use std::{sync::Arc, time::Duration};
 
     #[tokio::test]
     async fn it_works() {
@@ -274,5 +276,72 @@ mod tests {
             .unwrap();
 
         println!("done ping")
+    }
+
+    async fn blpop_helper(pool: Arc<Pool<RedisConnectionManager>>) -> Result<()> {
+        let mut conn = pool.connection().await.unwrap();
+        let response = redis::cmd("blpop")
+            .arg("random_key")
+            .arg(10)
+            .query_async::<_, ()>(&mut *conn)
+            .await;
+
+        match response {
+            Ok(_) => println!("Successful blpop"),
+            Err(e) => println!("Unsuccessful blpop: {:?}", e),
+        };
+
+        Ok(())
+    }
+
+    async fn ping_helper(pool: Arc<Pool<RedisConnectionManager>>) -> Result<()> {
+        let mut conn = pool.connection().await.unwrap();
+        redis::cmd("PING").query_async::<_, ()>(&mut *conn).await
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn it_works_on_pause() {
+        let mgr = RedisConnectionManager::new("redis://127.0.0.1:6379/0").unwrap();
+        let config = Default::default();
+        let pool = Pool::new(mgr, config).await.unwrap();
+        let pool_arc = Arc::new(pool);
+
+        // print out some pool stats every so often
+        let print_pool = Arc::clone(&pool_arc);
+        tokio::spawn(async move {
+            loop {
+                println!("Pool Min: {}", print_pool.min_conns());
+                println!("Pool Idle: {}", print_pool.idle_conns());
+                println!("Pool Total: {}", print_pool.total_conns());
+                println!("Pool Max: {}", print_pool.max_conns());
+                println!("");
+
+                tokio::time::delay_for(Duration::from_millis(500)).await;
+            }
+        });
+
+        let blpop_pool = Arc::clone(&pool_arc);
+        tokio::spawn(async move {
+            // spawn 10 blpop commands to exhaust the pool
+            let mut blpop_futures = vec![];
+            println!("Spawning {} blpop commands", blpop_pool.max_conns());
+            for _ in std::usize::MIN..blpop_pool.max_conns() {
+                let f = blpop_helper(Arc::clone(&blpop_pool));
+                blpop_futures.push(f);
+            }
+            join_all::<_>(blpop_futures).await;
+            println!("Resolved all blpop futures");
+        });
+
+        tokio::time::delay_for(Duration::from_millis(100)).await;
+
+        println!("Attempting to ping now...");
+        loop {
+            match ping_helper(Arc::clone(&pool_arc)).await {
+                Ok(_) => println!("Successful ping"),
+                Err(e) => println!("Error: {:?}", e),
+            }
+        }
     }
 }

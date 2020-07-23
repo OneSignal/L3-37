@@ -10,10 +10,13 @@ description = "l337 manager for redis"
 l337 = { version = "0.4", path = ".." }
 futures = "0.3"
 tokio = "0.2"
-redis = "0.14.0"
+redis = "0.16.0"
 async-trait = "0.1.22"
 log = "0.4"
 
 [dev-dependencies]
 # Required for the #[tokio::test] macro
 tokio = { version = "0.2", features = ["rt-core", "macros"] }
+
+[[example]]
+name = "connection-loss"

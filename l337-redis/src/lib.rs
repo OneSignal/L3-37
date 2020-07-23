@@ -177,7 +177,7 @@ impl l337::ManageConnection for RedisConnectionManager {
         debug!("connect: try redis connection");
         let (connection, future) = self
             .client
-            .get_multiplexed_async_connection()
+            .create_multiplexed_tokio_connection()
             .await
             .map_err(l337::Error::External)?;
 

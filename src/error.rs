@@ -22,11 +22,11 @@ pub enum Error<E: failure::Fail> {
     External(E),
 }
 
-impl<E> From<tokio::time::Elapsed> for Error<E>
+impl<E> From<tokio::time::error::Elapsed> for Error<E>
 where
     E: failure::Fail,
 {
-    fn from(_: tokio::time::Elapsed) -> Self {
+    fn from(_: tokio::time::error::Elapsed) -> Self {
         Self::Internal(InternalError::TimedOut)
     }
 }

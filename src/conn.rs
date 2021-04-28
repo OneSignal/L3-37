@@ -135,7 +135,7 @@ mod tests {
     use crate::tests::DummyManager;
     use crate::Config;
     use std::time::Duration;
-    use tokio::time::delay_for;
+    use tokio::time::sleep;
 
     #[tokio::test]
     async fn conn_pushes_back_into_pool_after_drop() {
@@ -152,7 +152,7 @@ mod tests {
 
         // The connection is added back to the pool asynchronously, so we need
         // to wait for the future to finish.
-        delay_for(Duration::from_secs(1)).await;
+        sleep(Duration::from_secs(1)).await;
 
         assert_eq!(pool.idle_conns(), 2);
     }

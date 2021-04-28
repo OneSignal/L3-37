@@ -53,7 +53,7 @@ async fn main() -> RedisResult<()> {
         println!("Finished all blpop commands");
     });
 
-    tokio::time::delay_for(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
     println!("Attempting to start pinging...");
     let ping_pool = Arc::clone(&pool_arc);

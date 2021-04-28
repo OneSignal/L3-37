@@ -1,5 +1,8 @@
 # 0.7.0
 
+- Meta
+    - Update MSRV to 1.48
+
 - l337
     - Upgrade to tokio 1.x
 - l337-redis

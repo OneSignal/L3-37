@@ -207,7 +207,7 @@ impl<C: ManageConnection + Send> Pool<C> {
                     // problematic because tokio's scheduler will allow the task
                     // to block up the runtime, so it is useful to add some
                     // delays to loops to allow other futures to be polled.
-                    tokio::time::delay_for(Duration::from_millis(100)).await;
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
         }
@@ -343,7 +343,7 @@ impl<C: ManageConnection + Send> Pool<C> {
                             err
                         );
                         // TODO: make this use config
-                        time::delay_for(Duration::from_secs(1)).await;
+                        time::sleep(Duration::from_secs(1)).await;
                     }
                 }
             }

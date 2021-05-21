@@ -22,6 +22,7 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use crate::Error as L337Error;
+use async_trait::async_trait;
 
 /// A trait which provides connection-specific functionality.
 #[async_trait]

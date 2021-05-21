@@ -43,16 +43,6 @@
 //!
 //! Any connection type that implements the `ManageConnection` trait can be used with this libary.
 
-extern crate crossbeam_queue;
-extern crate futures;
-extern crate tokio;
-#[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate async_trait;
-
 mod config;
 mod conn;
 mod error;
@@ -374,6 +364,8 @@ impl<C: ManageConnection + Send> Pool<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use failure::Fail;
     use std::sync::{atomic::*, Arc};
     use std::time::Duration;
     use tokio::time::timeout;

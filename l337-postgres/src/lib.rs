@@ -1,16 +1,7 @@
 //! Postgres adapater for l3-37 pool
 // #![deny(missing_docs, missing_debug_implementations)]
 
-extern crate futures;
-pub extern crate l337;
-extern crate tokio;
-pub extern crate tokio_postgres;
-
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate async_trait;
-
+use async_trait::async_trait;
 use futures::{channel::oneshot, prelude::*};
 use std::{
     convert::{AsMut, AsRef},

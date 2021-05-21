@@ -1,18 +1,19 @@
 [package]
 name = "l337-redis"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["Jonathon Sheffield <samsmug@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 description = "l337 manager for redis"
 
 [dependencies]
-l337 = { version = "0.7", path = ".." }
+l337 = { version = "0.8", path = ".." }
 futures = "0.3"
 tokio = "1"
 redis = { version = "0.20", features = ["aio", "tokio-comp"] }
 async-trait = "0.1.22"
-log = "0.4"
+tracing = "0.1"
+tracing-futures = "0.2"
 
 [dev-dependencies]
 # Required for the #[tokio::test] macro

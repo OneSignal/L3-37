@@ -1,3 +1,7 @@
+# 0.8.0
+
+- Replace `log` events with `tracing` spans
+
 # 0.7.0
 
 - Meta

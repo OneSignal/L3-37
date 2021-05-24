@@ -43,16 +43,6 @@
 //!
 //! Any connection type that implements the `ManageConnection` trait can be used with this libary.
 
-extern crate crossbeam_queue;
-extern crate futures;
-extern crate tokio;
-#[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate async_trait;
-
 mod config;
 mod conn;
 mod error;
@@ -68,6 +58,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
+use tracing::{debug, debug_span, error, Instrument};
 
 use crate::error::InternalError;
 
@@ -158,11 +149,18 @@ impl<C: ManageConnection + Send> Pool<C> {
     ///
     /// Timeout ability can be added to this method by calling `connection_timeout` on the `Config`.
     pub async fn connection(&self) -> Result<Conn<C>, Error<C::Error>> {
-        if let Some(timeout) = self.config.connect_timeout {
-            tokio::time::timeout(timeout, self.connect_no_timeout()).await?
-        } else {
-            self.connect_no_timeout().await
+        async {
+            if let Some(timeout) = self.config.connect_timeout {
+                tokio::time::timeout(timeout, self.connect_no_timeout()).await?
+            } else {
+                self.connect_no_timeout().await
+            }
         }
+        .instrument(debug_span!(
+            "l337::Pool::connection",
+            pool_type = std::any::type_name::<C>(),
+        ))
+        .await
     }
 
     async fn connect_no_timeout(&self) -> Result<Conn<C>, Error<C::Error>> {
@@ -188,10 +186,10 @@ impl<C: ManageConnection + Send> Pool<C> {
 
             match self.conn_pool.is_valid(&mut connection).await {
                 Ok(()) => return Ok(connection),
-                Err(e) => {
+                Err(error) => {
                     debug!(
-                        "connection: found connection in pool that is no longer valid - removing from pool: {:?}",
-                        e
+                        %error,
+                        "connection: found connection in pool that is no longer valid - removing from pool",
                     );
 
                     connection.forget();
@@ -374,6 +372,8 @@ impl<C: ManageConnection + Send> Pool<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use failure::Fail;
     use std::sync::{atomic::*, Arc};
     use std::time::Duration;
     use tokio::time::timeout;

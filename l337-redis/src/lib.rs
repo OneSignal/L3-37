@@ -1,21 +1,14 @@
 //! Postgres adapater for l3-37 pool
 // #![deny(missing_docs, missing_debug_implementations)]
 
-extern crate futures;
-pub extern crate l337;
-extern crate redis;
-extern crate tokio;
-#[macro_use]
-extern crate async_trait;
-#[macro_use]
-extern crate log;
-
+use async_trait::async_trait;
 use futures::{
     channel::oneshot,
     future::{self, BoxFuture},
 };
 use redis::aio::{ConnectionLike, MultiplexedConnection};
 use redis::{Client, Cmd, IntoConnectionInfo, Pipeline, RedisError, RedisFuture, Value};
+use tracing::{debug, debug_span, warn, Instrument};
 
 use std::{
     convert::{AsMut, AsRef},
@@ -174,10 +167,10 @@ impl l337::ManageConnection for RedisConnectionManager {
     type Error = RedisError;
 
     async fn connect(&self) -> std::result::Result<Self::Connection, l337::Error<Self::Error>> {
-        debug!("connect: try redis connection");
         let (connection, future) = self
             .client
             .create_multiplexed_tokio_connection()
+            .instrument(debug_span!("connect: open new redis connection"))
             .await
             .map_err(l337::Error::External)?;
 
@@ -242,8 +235,8 @@ impl l337::ManageConnection for RedisConnectionManager {
             Ok(None) => false,
             // This can happen if the future that the connection was
             // spawned in panicked or was dropped.
-            Err(err) => {
-                warn!("cannot receive from connection future - err: {}", err);
+            Err(error) => {
+                warn!(%error, "cannot receive from connection future");
                 conn.broken = true;
                 true
             }

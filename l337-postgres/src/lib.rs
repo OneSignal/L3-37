@@ -1,16 +1,7 @@
 //! Postgres adapater for l3-37 pool
 // #![deny(missing_docs, missing_debug_implementations)]
 
-extern crate futures;
-pub extern crate l337;
-extern crate tokio;
-pub extern crate tokio_postgres;
-
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate async_trait;
-
+use async_trait::async_trait;
 use futures::{channel::oneshot, prelude::*};
 use std::{
     convert::{AsMut, AsRef},
@@ -22,6 +13,7 @@ use tokio_postgres::{
     tls::{MakeTlsConnect, TlsConnect},
     Client, Socket,
 };
+use tracing::{debug, debug_span, info, warn, Instrument};
 
 use std::fmt;
 
@@ -105,10 +97,10 @@ where
     type Error = Error;
 
     async fn connect(&self) -> Result<Self::Connection, l337::Error<Self::Error>> {
-        debug!("connect: open postgres connection");
         let (client, connection) = self
             .config
             .connect(self.make_tls_connect.clone())
+            .instrument(debug_span!("connect: open new postgres connection"))
             .await
             .map_err(|e| l337::Error::External(e))?;
 
@@ -178,8 +170,8 @@ where
             Ok(None) => false,
             // This can happen if the future that the connection was
             // spawned in panicked or was dropped.
-            Err(err) => {
-                warn!("cannot receive from connection future - err: {}", err);
+            Err(error) => {
+                warn!(%error, "cannot receive from connection future");
                 conn.broken = true;
                 true
             }

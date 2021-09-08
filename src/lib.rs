@@ -373,7 +373,7 @@ impl<C: ManageConnection + Send> Pool<C> {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use failure::Fail;
+    use thiserror::Error;
     use std::sync::{atomic::*, Arc};
     use std::time::Duration;
     use tokio::time::timeout;
@@ -390,8 +390,8 @@ mod tests {
         broken: bool,
     }
 
-    #[derive(Debug, Fail)]
-    #[fail(display = "DummyError")]
+    #[derive(Debug, Error)]
+    #[error("DummyError")]
     pub struct DummyError;
 
     impl DummyManager {

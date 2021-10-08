@@ -1,32 +1,32 @@
-use failure::Fail;
+use thiserror::Error;
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Error)]
 pub enum InternalError {
-    #[fail(display = "unknown error: {}", _0)]
+    #[error("unknown error: {0}")]
     Other(String),
 
-    #[fail(display = "Tried to get a connection from the pool, but all connections were invalid")]
+    #[error("Tried to get a connection from the pool, but all connections were invalid")]
     AllConnectionsInvalid,
 
-    #[fail(display = "Timed out waiting for a connection to become available")]
+    #[error("Timed out waiting for a connection to become available")]
     TimedOut,
 }
 
 /// Error type returned by this module
-#[derive(Debug, Fail)]
-pub enum Error<E: failure::Fail> {
+#[derive(Debug, Error)]
+pub enum Error<E: std::error::Error> {
     /// Error coming from the connection pooling itself
-    #[fail(display = "l337 internal error: {}", _0)]
-    Internal(InternalError),
+    #[error("l337 internal error")]
+    Internal(#[source] InternalError),
 
     /// Error from the connection manager or the underlying client
-    #[fail(display = "l337 manager error: {}", _0)]
-    External(E),
+    #[error("l337 manager error")]
+    External(#[source] E),
 }
 
 impl<E> From<tokio::time::error::Elapsed> for Error<E>
 where
-    E: failure::Fail,
+    E: std::error::Error,
 {
     fn from(_: tokio::time::error::Elapsed) -> Self {
         Self::Internal(InternalError::TimedOut)

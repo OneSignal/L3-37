@@ -31,7 +31,7 @@ pub trait ManageConnection: Send + Sync + 'static {
     type Connection: Send + 'static;
 
     /// The error type returned by `Connection`s.
-    type Error: failure::Fail;
+    type Error: std::error::Error + Send;
 
     /// Attempts to create a new connection.
     ///

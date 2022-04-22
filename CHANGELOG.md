@@ -1,7 +1,12 @@
 # 0.10.0
 
+- Meta
+    - Update MSRV to 1.49 for tokio's dependency to [std::hint::spin_loop].
+
 - l337-redis
     - Upgrade redis crate to 0.21
+
+[std::hint::spin_loop]: https://doc.rust-lang.org/std/hint/fn.spin_loop.html
 
 # 0.8.0
 

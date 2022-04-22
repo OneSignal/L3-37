@@ -2,10 +2,10 @@ version: 2
 jobs:
   build:
     docker: # use the docker executor type; machine and macos executors are also supported
-      - image: circleci/rust:1.57
-      - image: redis:6
+      - image: circleci/rust:1.49
+      - image: redis:4.0.1
         name: redis
-      - image: "sfackler/rust-postgres-test:6"
+      - image: "sfackler/rust-postgres-test:4"
         ports:
           - 5433:5433
     steps:

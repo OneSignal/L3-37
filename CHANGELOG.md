@@ -1,3 +1,8 @@
+# 0.10.0
+
+- l337-redis
+    - Upgrade redis crate to 0.21
+
 # 0.8.0
 
 - Replace `log` events with `tracing` spans

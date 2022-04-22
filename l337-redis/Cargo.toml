@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 description = "l337 manager for redis"
 
 [dependencies]
-l337 = { version = "0.9", path = ".." }
+l337 = { version = "0.10", path = ".." }
 futures = "0.3"
 tokio = "1"
 redis = { version = "0.21", features = ["aio", "tokio-comp"] }
